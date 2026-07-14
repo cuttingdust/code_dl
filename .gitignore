@@ -1,0 +1,61 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+ola/
+base/
+trt/
+
+# IDE and editor settings
+.idea/
+.vscode/
+*.iml
+*.swp
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Test, lint, and type-check caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Packaging and build outputs
+build/
+dist/
+*.egg-info/
+
+# Environment variables and local secrets
+.env
+.env.*
+!.env.example
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+
+# Machine-learning outputs and model weights
+checkpoints/
+runs/
+outputs/
+wandb/
+mlruns/
+tensorboard/
+*.ckpt
+*.onnx
+*.pt
+*.pth
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+Desktop.ini
