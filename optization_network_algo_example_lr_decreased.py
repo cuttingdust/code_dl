@@ -1,8 +1,6 @@
 import torch
 from matplotlib import pyplot as plt
 from torch import optim
-from torch.ao.pruning import scheduler
-
 
 def demo01() -> None:
     # 定义相关数据：样本真实值、特征值、初始化权重
