@@ -65,22 +65,30 @@ class PhonePriceModel(nn.Module):
         # 3.1- 第一层隐藏层
         # 注意：in_features需要和数据中特征个数完全一致
         self.linear1 = nn.Linear(in_features=self.feature_nums, out_features=256)
+        self.dropout1 = nn.Dropout(p=0.3)
+
         # 3.2- 第二层隐藏层
         self.linear2 = nn.Linear(in_features=256, out_features=512)
+        # self.dropout2 = nn.Dropout(p=0.3)
+
         # 3.3- 第三层隐藏层
         self.linear3 = nn.Linear(in_features=512, out_features=256)
+        self.dropout3 = nn.Dropout(p=0.3)
+
         # 3.4-输出层
         self.output = nn.Linear(in_features=256, out_features=self.target_nums)
 
     def forward(self, data):
         # 1- 经过第一层隐藏层
-        data = torch.relu(self.linear1(data))
+        # data = torch.relu(self.linear1(data))
+        data = self.dropout1(torch.relu(self.linear1(data)))
 
         # 2- 经过第二层隐藏层
         data = torch.relu(self.linear2(data))
 
         # 3- 经过第三层隐藏层
-        data = torch.relu(self.linear3(data))
+        # data = torch.relu(self.linear3(data))
+        data = self.dropout3(torch.relu(self.linear3(data)))
 
         # 4- 经过输出层得到结果
         # 为什么这里不明确的调用softmax激活函数？因为后续训练的时候会调用CrossEntropyLoss，里面自带softmax
