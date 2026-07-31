@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 from torch import nn
 from torch import optim
 from torch.utils.data import DataLoader
@@ -24,10 +25,13 @@ def create_dataset():
     )
 
     # TODO 特征标准化处理
+    transformer = StandardScaler()
+    x_train = transformer.fit_transform(x_train)
+    x_test = transformer.transform(x_test)
 
     # 4- DataFrame->Tensor张量
-    x_train = torch.tensor(x_train.values, dtype=torch.float32)
-    x_test = torch.tensor(x_test.values, dtype=torch.float32)
+    x_train = torch.tensor(x_train, dtype=torch.float32)
+    x_test = torch.tensor(x_test, dtype=torch.float32)
     # values：只取数据内容，字段名称等不需要
     # int64是long类型
     y_train = torch.tensor(y_train.values, dtype=torch.int64)
