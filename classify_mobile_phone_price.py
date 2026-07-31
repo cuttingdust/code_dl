@@ -119,7 +119,8 @@ def train_model(train_dataset, test_dataset, feature_nums, target_nums):
         params：告诉梯度下降算法，要帮我对什么参数进行优化（梯度下降），这里就是w和b
         lr：学习率
     """
-    optimzer = optim.SGD(params=model.parameters(), lr=1e-3)
+    # optimzer = optim.SGD(params=model.parameters(), lr=1e-3)
+    optimzer = optim.Adam(model.parameters(), lr=1e-4, betas=(0.9, 0.99))
 
     # 5- 循环训练
     epochs = 50  # 对总样本，总共训练多少个轮次
