@@ -6,4 +6,4 @@ if __name__ == "__main__":
 
     # 张量中不能放非数字：例如字符串
     # data2 = torch.tensor(data=["hello"])
-    print(data2)
+    # print(data2)
