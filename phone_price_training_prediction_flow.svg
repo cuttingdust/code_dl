@@ -1,0 +1,223 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1000" width="1400" height="1000">
+<style>
+  text { font-family: 'Helvetica Neue', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', 'Microsoft JhengHei', 'SimHei', sans-serif; }
+</style>
+<defs>
+  <marker id="arrow-blue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+    <polygon points="0 0, 10 3.5, 0 7" fill="#2563eb"/>
+  </marker>
+  <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+    <polygon points="0 0, 10 3.5, 0 7" fill="#16a34a"/>
+  </marker>
+  <marker id="arrow-purple" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+    <polygon points="0 0, 10 3.5, 0 7" fill="#9333ea"/>
+  </marker>
+  <marker id="arrow-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+    <polygon points="0 0, 10 3.5, 0 7" fill="#ea580c"/>
+  </marker>
+</defs>
+<rect width="1400" height="1000" fill="#ffffff"/>
+<text x="700" y="42" text-anchor="middle" font-size="24" font-weight="600" fill="#111827">
+  <tspan x="700" dy="0">手机价格分类：训练与预测完整流程</tspan>
+</text>
+<text x="700" y="70" text-anchor="middle" font-size="14" font-weight="400" fill="#6b7280">
+  <tspan x="700" dy="0">训练负责学习并保存参数；预测只加载参数并进行前向传播</tspan>
+</text>
+<rect x="40" y="100" width="640" height="820" rx="12" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5" stroke-dasharray="7,5"/>
+<rect x="720" y="100" width="640" height="820" rx="12" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1.5" stroke-dasharray="7,5"/>
+<text x="360" y="132" text-anchor="middle" font-size="18" font-weight="600" fill="#1d4ed8">
+  <tspan x="360" dy="0">训练流程（反复更新参数）</tspan>
+</text>
+<text x="1040" y="132" text-anchor="middle" font-size="18" font-weight="600" fill="#15803d">
+  <tspan x="1040" dy="0">预测流程（参数保持不变）</tspan>
+</text>
+<path d="M 360 224 L 360 250" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+<path d="M 360 314 L 360 340" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+<path d="M 360 404 L 360 430" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+<path d="M 360 494 L 360 520" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+<path d="M 360 584 L 360 610" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+<path d="M 360 674 L 360 700" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+<path d="M 360 764 L 360 790" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+<text x="430" y="782" text-anchor="middle" font-size="12" font-weight="600" fill="#2563eb">
+  <tspan x="430" dy="0">达到 epochs</tspan>
+</text>
+<path d="M 620 732 L 650 732 L 650 462 L 620 462" fill="none" stroke="#9333ea" stroke-width="2" marker-end="url(#arrow-purple)"/>
+<text x="550" y="688" text-anchor="middle" font-size="12" font-weight="600" fill="#9333ea">
+  <tspan x="550" dy="0">下一个批次 / Epoch</tspan>
+</text>
+<path d="M 620 822 L 700 822 L 700 492 L 780 492" fill="none" stroke="#ea580c" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrow-orange)"/>
+<text x="700" y="474" text-anchor="middle" font-size="12" font-weight="600" fill="#ea580c">
+  <tspan x="700" dy="0">加载 state_dict</tspan>
+</text>
+<path d="M 1040 224 L 1040 250" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow-green)"/>
+<path d="M 1040 314 L 1040 340" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow-green)"/>
+<path d="M 1040 404 L 1040 450" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow-green)"/>
+<path d="M 1040 514 L 1040 540" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow-green)"/>
+<path d="M 1040 604 L 1040 630" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow-green)"/>
+<path d="M 1040 694 L 1040 720" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow-green)"/>
+<path d="M 1040 784 L 1040 810" fill="none" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow-green)"/>
+<g id="train-csv">
+  <polygon points="118,160 620,160 602,224 100,224" fill="#ffffff" stroke="#93c5fd" stroke-width="1.5"/>
+<text x="360" y="187" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">
+  <tspan x="360" dy="0">读取 CSV 数据</tspan>
+</text>
+<text x="360" y="209" text-anchor="middle" font-size="12" font-weight="400" fill="#6b7280">
+  <tspan x="360" dy="0">2000 条样本 · 20 个特征 · 标签 0/1/2/3</tspan>
+</text>
+</g>
+<g id="train-split">
+  <rect x="100" y="250" width="520" height="64" rx="8" ry="8" fill="#ffffff" stroke="#93c5fd" stroke-width="1.5"/>
+<text x="360" y="277" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">
+  <tspan x="360" dy="0">划分训练集与测试集</tspan>
+</text>
+<text x="360" y="299" text-anchor="middle" font-size="12" font-weight="400" fill="#6b7280">
+  <tspan x="360" dy="0">train_test_split · 建议 stratify=y</tspan>
+</text>
+</g>
+<g id="train-scale">
+  <rect x="100" y="340" width="520" height="64" rx="8" ry="8" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+<text x="360" y="367" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">
+  <tspan x="360" dy="0">特征标准化</tspan>
+</text>
+<text x="360" y="389" text-anchor="middle" font-size="12" font-weight="400" fill="#6b7280">
+  <tspan x="360" dy="0">只在训练集 fit；训练集和测试集使用同一个 scaler</tspan>
+</text>
+</g>
+<g id="train-loader">
+  <rect x="100" y="430" width="520" height="64" rx="8" ry="8" fill="#ffffff" stroke="#93c5fd" stroke-width="1.5"/>
+<text x="360" y="457" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">
+  <tspan x="360" dy="0">TensorDataset → DataLoader</tspan>
+</text>
+<text x="360" y="479" text-anchor="middle" font-size="12" font-weight="400" fill="#6b7280">
+  <tspan x="360" dy="0">按 batch 取出 x:[B,20] 与 y:[B]</tspan>
+</text>
+</g>
+<g id="train-forward">
+  <rect x="100" y="520" width="520" height="64" rx="8" ry="8" fill="#dbeafe" stroke="#60a5fa" stroke-width="1.5"/>
+<text x="360" y="547" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">
+  <tspan x="360" dy="0">模型前向传播</tspan>
+</text>
+<text x="360" y="569" text-anchor="middle" font-size="12" font-weight="400" fill="#6b7280">
+  <tspan x="360" dy="0">20 → 256 → 512 → 256 → 4 logits</tspan>
+</text>
+</g>
+<g id="train-loss">
+  <rect x="100" y="610" width="520" height="64" rx="8" ry="8" fill="#ffffff" stroke="#93c5fd" stroke-width="1.5"/>
+<text x="360" y="637" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">
+  <tspan x="360" dy="0">计算交叉熵损失</tspan>
+</text>
+<text x="360" y="659" text-anchor="middle" font-size="12" font-weight="400" fill="#6b7280">
+  <tspan x="360" dy="0">CrossEntropyLoss(logits, y) · 内部包含 LogSoftmax</tspan>
+</text>
+</g>
+<g id="train-update">
+  <rect x="100" y="700" width="520" height="64" rx="8" ry="8" fill="#faf5ff" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="360" y="727" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">
+  <tspan x="360" dy="0">反向传播并更新参数</tspan>
+</text>
+<text x="360" y="749" text-anchor="middle" font-size="12" font-weight="400" fill="#6b7280">
+  <tspan x="360" dy="0">zero_grad → backward → optimizer.step</tspan>
+</text>
+</g>
+<g id="train-save">
+  <rect x="100" y="790" width="520" height="64" rx="8" ry="8" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+<text x="360" y="817" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">
+  <tspan x="360" dy="0">保存训练结果</tspan>
+</text>
+<text x="360" y="839" text-anchor="middle" font-size="12" font-weight="400" fill="#6b7280">
+  <tspan x="360" dy="0">torch.save(model.state_dict(), model_path)</tspan>
+</text>
+</g>
+<g id="predict-input">
+  <polygon points="798,160 1300,160 1282,224 780,224" fill="#ffffff" stroke="#86efac" stroke-width="1.5"/>
+<text x="1040" y="187" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">
+  <tspan x="1040" dy="0">输入一部新手机的数据</tspan>
+</text>
+<text x="1040" y="209" text-anchor="middle" font-size="12" font-weight="400" fill="#6b7280">
+  <tspan x="1040" dy="0">必须提供与训练时相同的 20 个特征</tspan>
+</text>
+</g>
+<g id="predict-order">
+  <rect x="780" y="250" width="520" height="64" rx="8" ry="8" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+<text x="1040" y="277" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">
+  <tspan x="1040" dy="0">保持特征顺序并标准化</tspan>
+</text>
+<text x="1040" y="299" text-anchor="middle" font-size="12" font-weight="400" fill="#6b7280">
+  <tspan x="1040" dy="0">使用训练阶段保存的同一个 scaler.transform</tspan>
+</text>
+</g>
+<g id="predict-tensor">
+  <rect x="780" y="340" width="520" height="64" rx="8" ry="8" fill="#ffffff" stroke="#86efac" stroke-width="1.5"/>
+<text x="1040" y="367" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">
+  <tspan x="1040" dy="0">转换为 FloatTensor</tspan>
+</text>
+<text x="1040" y="389" text-anchor="middle" font-size="12" font-weight="400" fill="#6b7280">
+  <tspan x="1040" dy="0">单条数据形状：[1, 20]</tspan>
+</text>
+</g>
+<g id="predict-load">
+  <rect x="780" y="450" width="520" height="64" rx="8" ry="8" fill="#dcfce7" stroke="#4ade80" stroke-width="1.5"/>
+<text x="1040" y="477" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">
+  <tspan x="1040" dy="0">创建模型并加载参数</tspan>
+</text>
+<text x="1040" y="499" text-anchor="middle" font-size="12" font-weight="400" fill="#6b7280">
+  <tspan x="1040" dy="0">load_state_dict(...) → model.eval()</tspan>
+</text>
+</g>
+<g id="predict-forward">
+  <rect x="780" y="540" width="520" height="64" rx="8" ry="8" fill="#dcfce7" stroke="#4ade80" stroke-width="1.5"/>
+<text x="1040" y="567" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">
+  <tspan x="1040" dy="0">关闭梯度并前向传播</tspan>
+</text>
+<text x="1040" y="589" text-anchor="middle" font-size="12" font-weight="400" fill="#6b7280">
+  <tspan x="1040" dy="0">with torch.no_grad(): pred_y = model(x)</tspan>
+</text>
+</g>
+<g id="predict-logits">
+  <rect x="780" y="630" width="520" height="64" rx="8" ry="8" fill="#ffffff" stroke="#86efac" stroke-width="1.5"/>
+<text x="1040" y="657" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">
+  <tspan x="1040" dy="0">获得 4 个类别分数</tspan>
+</text>
+<text x="1040" y="679" text-anchor="middle" font-size="12" font-weight="400" fill="#6b7280">
+  <tspan x="1040" dy="0">pred_y / logits 形状：[1, 4]</tspan>
+</text>
+</g>
+<g id="predict-argmax">
+  <rect x="780" y="720" width="520" height="64" rx="8" ry="8" fill="#dcfce7" stroke="#4ade80" stroke-width="1.5"/>
+<text x="1040" y="747" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">
+  <tspan x="1040" dy="0">选择最大分数的下标</tspan>
+</text>
+<text x="1040" y="769" text-anchor="middle" font-size="12" font-weight="400" fill="#6b7280">
+  <tspan x="1040" dy="0">pred_id = torch.argmax(pred_y, dim=-1)</tspan>
+</text>
+</g>
+<g id="predict-output">
+  <polygon points="798,810 1300,810 1282,874 780,874" fill="#ffffff" stroke="#86efac" stroke-width="1.5"/>
+<text x="1040" y="837" text-anchor="middle" font-size="15" font-weight="600" fill="#111827">
+  <tspan x="1040" dy="0">输出预测价格等级</tspan>
+</text>
+<text x="1040" y="859" text-anchor="middle" font-size="12" font-weight="400" fill="#6b7280">
+  <tspan x="1040" dy="0">类别 0 / 1 / 2 / 3</tspan>
+</text>
+</g>
+<rect x="40" y="940" width="1320" height="42" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+<line x1="70" y1="961" x2="105" y2="961" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+<text x="118" y="965" text-anchor="start" font-size="12" font-weight="400" fill="#6b7280">
+  <tspan x="118" dy="0">训练数据流</tspan>
+</text>
+<line x1="245" y1="961" x2="280" y2="961" stroke="#16a34a" stroke-width="2" marker-end="url(#arrow-green)"/>
+<text x="293" y="965" text-anchor="start" font-size="12" font-weight="400" fill="#6b7280">
+  <tspan x="293" dy="0">预测数据流</tspan>
+</text>
+<line x1="420" y1="961" x2="455" y2="961" stroke="#9333ea" stroke-width="2" marker-end="url(#arrow-purple)"/>
+<text x="468" y="965" text-anchor="start" font-size="12" font-weight="400" fill="#6b7280">
+  <tspan x="468" dy="0">训练循环</tspan>
+</text>
+<line x1="565" y1="961" x2="600" y2="961" stroke="#ea580c" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrow-orange)"/>
+<text x="613" y="965" text-anchor="start" font-size="12" font-weight="400" fill="#6b7280">
+  <tspan x="613" dy="0">模型参数文件</tspan>
+</text>
+<text x="1330" y="965" text-anchor="end" font-size="12" font-weight="600" fill="#374151">
+  <tspan x="1330" dy="0">关键区别：预测没有 loss、backward 和 optimizer.step</tspan>
+</text>
+</svg>
