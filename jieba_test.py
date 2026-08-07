@@ -1,6 +1,4 @@
 import jieba
-from pygments.lexer import words
-from redis.commands.search import result
 
 """
     推荐要求大家重点掌握jieba.lcut()方法即可

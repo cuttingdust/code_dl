@@ -54,6 +54,7 @@ tensorboard/
 *.onnx
 *.pt
 *.pth
+model/*.pkl
 
 # Operating-system files
 .DS_Store
