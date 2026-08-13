@@ -25,10 +25,15 @@ file_path = os.path.join(r"data", r"eng-fra-v2.txt")
 MAX_LENGTH = 10
 
 
+## 额外 辅助类型
+## 日志模块 # 函数追踪模块 # torch 神经网络调试模块 #
+
+
+print("")
 ####################################################################################################
 
 
-class MTracePoint:
+class MPoint:
     """
     Python版本的函数执行跟踪器，作用类似C++项目中的：
 
@@ -97,7 +102,7 @@ class MTracePoint:
             # BEGIN有5个字符，END只有3个字符，因此在END后补3个空格，
             # 让BEGIN和END后面的===以及函数名从同一列开始。
             f"=== END   === {self.function_name}{extra_message} End! "
-            f"[{result}，耗时 {elapsed_ms:.3f} ms]"
+            # f"[{result}，耗时 {elapsed_ms:.3f} ms]"
         )
 
         # 返回False表示不吞掉异常：如果被跟踪代码出错，程序仍然按正常方式抛出异常。
@@ -122,9 +127,8 @@ def normalize_string(line):
 
 
 # 3- 数据预处理
-@MTracePoint(append_message="读取、清洗并建立英法词表")
+@MPoint(append_message="读取、清洗并建立英法词表")
 def getdata():
-    print("-" * 50)
     # 1- 读取文件的所有行
     """
     大文件推荐用readline
@@ -249,7 +253,7 @@ class MyPairsDataset(Dataset):
 
 
 # 5- 创建Dataloader
-@MTracePoint(append_message="创建训练数据加载器")
+@MPoint(append_message="创建训练数据加载器")
 def get_dataloader():
     # 1- 创建Dataset
     dataset = MyPairsDataset(sen_pairs)
@@ -345,14 +349,22 @@ class Encoder(nn.Module):
 
 
 # 7- 测试编码器
-@MTracePoint(append_message="测试Encoder前向传播")
+@MPoint(append_message="测试Encoder前向传播")
 def use_encoder() -> None:
     # 1- 准备数据
     dataloader = get_dataloader()
 
     # 2- 创建编码器对象
     my_encoder = Encoder(vocab_size=english_word_n, input_size=256, hidden_size=256)
-    # 将对象发送到对应的设备
+
+    ###################################################
+    print(my_encoder)
+
+    ###################################################
+
+    # Dataset生成的x、y以及init_hidden()返回的hidden都位于全局device上，
+    # 所以正式前向传播使用的原模型也必须发送到同一个device。
+    # torchview仍会在下面复制一份CPU模型进行绘图，不会移动这份原模型。
     my_encoder = my_encoder.to(device)
 
     # 3- 遍历数据，进行前向传播
