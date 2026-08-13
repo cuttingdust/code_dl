@@ -183,10 +183,134 @@ def get_dataloader():
     return dataloader
 
 
-if __name__ == "__main__":
+####################################################################################################
+
+
+# 6- 编码器：没有注意力
+class Encoder(nn.Module):
+    def __init__(self, vocab_size, input_size, hidden_size):
+        # 1- 初始化父类
+        super().__init__()
+
+        # 2- 设置属性值
+        self.vocab_size = vocab_size  # 英语词汇表中词的个数
+        self.input_size = input_size  # 词向量维度
+        self.hidden_size = hidden_size  # 隐藏状态向量维度
+
+        # 3- 搭建神经网络结构
+        # 3.1- 词嵌入层
+        """
+            参数解释：
+                num_embeddings：词汇表中词的个数（去重后的）
+                embedding_dim：词向量维度
+        """
+        self.ebd = nn.Embedding(
+            num_embeddings=self.vocab_size, embedding_dim=self.input_size
+        )
+
+        # 3.2- 循环网络层。GRU
+        """
+            参数解释：
+                input_size：本次输入词向量维度
+                hidden_size：隐藏状态向量维度
+                num_layers：隐藏层层数
+                batch_first：是否将batch_size放在张量的第一个位置。注意：只会调整input和output的形状，不会改变hidden的张量形状
+                    例如：[seq_len,batch_size,input_size] -> [batch_size,seq_len,input_size]
+        """
+        self.gru = nn.GRU(
+            input_size=self.input_size,
+            hidden_size=self.hidden_size,
+            num_layers=1,
+            batch_first=True,
+        )
+
+    def forward(self, input, hidden):
+        """
+        前向传播。输入英语句子，让编码器理解句子的意思
+        :param input: 本次输入数据，也就是单词的索引，张量形状：[batch_size,seq_len]
+        :param hidden: 上一个时间步的隐藏状态，张量形状：[num_layers,batch_size,hidden_size]
+        :return:
+        """
+        # 1- 词嵌入层：将词索引，变成词向量
+        """
+            输入参数input形状：[batch_size每个批次中有几个句子,seq_len每条句子中词的个数]
+            结果参数embed形状：[batch_size每个批次中有几个句子,seq_len每条句子中词的个数,input_size词向量维度]
+        """
+        print("0-input形状-->", input.shape)
+        embed = self.ebd(input)
+        print("1-embed形状-->", embed.shape)
+
+        # 2- GRU层
+        """
+            因为前面设置了batch_first为True，因此张量形状如下
+                输入参数：
+                    embed：[batch_size每个批次中有几个句子,seq_len每条句子中词的个数,input_size词向量维度]
+                    hidden：[num_layers,batch_size,hidden_size]
+
+                返回结果：
+                    output：[batch_size每个批次中有几个句子,seq_len每条句子中词的个数,hidden_size]
+                    hidden：[num_layers,batch_size,hidden_size]
+        """
+        output, hidden = self.gru(embed, hidden)
+
+        return output, hidden
+
+    def init_hidden(self):
+        # 隐藏状态张量形状：[num_layer,batch_size,hidden_size]
+        return torch.zeros(size=(1, 1, self.hidden_size), device=device)
+
+
+# 7- 测试编码器
+def use_encoder() -> None:
+    # 1- 准备数据
     dataloader = get_dataloader()
 
+    # 2- 创建编码器对象
+    my_encoder = Encoder(vocab_size=english_word_n, input_size=256, hidden_size=256)
+    # 将对象发送到对应的设备
+    my_encoder = my_encoder.to(device)
+
+    # 3- 遍历数据，进行前向传播
     for x, y in dataloader:
-        print(f"英语句子-->{x.shape}-->{x}")
-        print(f"法语句子-->{y.shape}-->{y}")
+        # 3.1- 初始化隐藏状态
+        hidden = my_encoder.init_hidden()
+
+        # 3.2- 前向传播
+        output, hidden = my_encoder(x, hidden)
+
+        print(f"2-output形状-->{output.shape}")  # 1,词的个数,256
+        print(f"3-hidden形状-->{hidden.shape}")  # 1,1,256
+
         break
+
+
+if __name__ == "__main__":
+    # content = " i LOVE heima! "
+    # content = " i LOVE hei@ma! "
+    # print(f"-{normalize_string(content)}-")
+
+    # getdata()
+
+    # print("-" * 50)
+    # dataloader = get_dataloader()
+    # for x, y in dataloader:
+    #     print(f"英语句子-->{x.shape}-->{x}")
+    #     print(f"法语句子-->{y.shape}-->{y}")
+    #
+    #     break
+    #
+    # print("-" * 50)
+    # print(english_word_n)
+    # print("-" * 50)
+    # print(english_word2index)
+    # print("-" * 50)
+    # print(english_index2word)
+    #
+    # print("-" * 50)
+    # print(french_word_n)
+    # print("-" * 50)
+    # print(french_word2index)
+    # print("-" * 50)
+    # print(french_index2word)
+
+    use_encoder()
