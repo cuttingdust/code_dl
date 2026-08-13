@@ -3,6 +3,9 @@
 """
 
 import os
+import functools
+import inspect
+import time
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
@@ -25,6 +28,85 @@ MAX_LENGTH = 10
 ####################################################################################################
 
 
+class MTracePoint:
+    """
+    Python版本的函数执行跟踪器，作用类似C++项目中的：
+
+        #define MPoint MTracePoint point(__FUNCTION__)
+
+    C++版本利用局部对象的构造函数和析构函数，在进入、离开函数时自动打印日志。
+    Python没有完全相同的宏和确定性析构机制，因此这里使用两种Python原生机制实现：
+
+    1. 装饰器（推荐用于跟踪整个函数）
+
+        @MTracePoint()
+        def getdata():
+            ...
+
+    2. 上下文管理器（用于只跟踪函数内部的一段代码）
+
+        with MTracePoint("load_data", "读取训练数据"):
+            ...
+
+    日志会自动包含：函数名、可选附加消息、执行结果和耗时。
+    如果函数内部抛出异常，异常不会被吞掉，只会先记录异常类型后继续向外抛出。
+    """
+
+    def __init__(self, function_name=None, append_message=None):
+        self.function_name = function_name
+        self.append_message = append_message
+        self.start_time = None
+
+    def __call__(self, func):
+        """让MTracePoint对象可以作为装饰器使用。"""
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            # 每次函数调用都创建一个新的跟踪对象，避免递归或多线程调用时共享开始时间。
+            with type(self)(
+                function_name=self.function_name or func.__qualname__,
+                append_message=self.append_message,
+            ):
+                return func(*args, **kwargs)
+
+        return wrapper
+
+    def __enter__(self):
+        """进入with代码块时执行，等价于C++ MTracePoint构造函数中的logStart。"""
+        if self.function_name is None:
+            # inspect.currentframe()得到当前__enter__栈帧，f_back是with所在函数的栈帧。
+            caller_frame = inspect.currentframe().f_back
+            self.function_name = caller_frame.f_code.co_name
+
+        extra_message = f" {self.append_message}" if self.append_message else ""
+        print(f"=== BEGIN === {self.function_name}{extra_message} Start!")
+        self.start_time = time.perf_counter()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """离开with代码块时执行，等价于C++ MTracePoint析构函数中的logEnd。"""
+        elapsed_ms = (time.perf_counter() - self.start_time) * 1000
+        extra_message = f" {self.append_message}" if self.append_message else ""
+
+        if exc_type is None:
+            result = "成功"
+        else:
+            result = f"异常：{exc_type.__name__}: {exc_value}"
+
+        print(
+            # BEGIN有5个字符，END只有3个字符，因此在END后补3个空格，
+            # 让BEGIN和END后面的===以及函数名从同一列开始。
+            f"=== END   === {self.function_name}{extra_message} End! "
+            f"[{result}，耗时 {elapsed_ms:.3f} ms]"
+        )
+
+        # 返回False表示不吞掉异常：如果被跟踪代码出错，程序仍然按正常方式抛出异常。
+        return False
+
+
+####################################################################################################
+
+
 # 2- 数据清洗
 def normalize_string(line):
     # 全部转小写，并且去除前后的空白字符
@@ -40,6 +122,7 @@ def normalize_string(line):
 
 
 # 3- 数据预处理
+@MTracePoint(append_message="读取、清洗并建立英法词表")
 def getdata():
     print("-" * 50)
     # 1- 读取文件的所有行
@@ -166,6 +249,7 @@ class MyPairsDataset(Dataset):
 
 
 # 5- 创建Dataloader
+@MTracePoint(append_message="创建训练数据加载器")
 def get_dataloader():
     # 1- 创建Dataset
     dataset = MyPairsDataset(sen_pairs)
@@ -261,6 +345,7 @@ class Encoder(nn.Module):
 
 
 # 7- 测试编码器
+@MTracePoint(append_message="测试Encoder前向传播")
 def use_encoder() -> None:
     # 1- 准备数据
     dataloader = get_dataloader()
