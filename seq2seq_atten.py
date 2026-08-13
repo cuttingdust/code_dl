@@ -9,6 +9,7 @@ import inspect
 import time
 import torch
 import torch.nn as nn
+from torchinfo import summary
 from torchview import draw_graph
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
@@ -415,6 +416,45 @@ def use_encoder() -> None:
         # )
         #
         # print("Encoder网络结构图已生成：seq2seq_encoder_structure.png")
+
+        ########################################################################
+
+        # # 3.2- 使用torchinfo打印Encoder的分层结构和参数统计
+        # #
+        # # torchinfo和上面的torchview用途不同：
+        # #   torchview：把网络的计算过程画成图片；
+        # #   torchinfo：在控制台打印每一层的输入形状、输出形状、参数量等信息。
+        # #
+        # # summary()会真正执行一次模型的forward()。为了让这次结构检查不影响
+        # # 下面正式使用的my_encoder，这里重新复制一份只供torchinfo使用的模型。
+        # # 这一段是独立示例，不依赖上面已经注释掉的torchview代码。
+        # summary_encoder = copy.deepcopy(my_encoder).cpu()
+        # summary_encoder.eval()
+        #
+        # # 不使用size=(1, 7)或size=(1, 1, 256)等硬编码形状。
+        # # x和hidden直接取自当前DataLoader批次，因此句子长度、批次大小和
+        # # 隐藏层维度发生变化时，torchinfo收到的输入也会自动跟着变化。
+        # #
+        # # detach()：torchinfo只负责查看网络结构，不需要连接原来的计算图；
+        # # cpu()：summary_encoder已经放在CPU上，所以输入也必须放在CPU上。
+        # summary_x = x.detach().cpu()
+        # summary_hidden = hidden.detach().cpu()
+        #
+        # print("\n-------------------- torchinfo网络结构摘要 --------------------")
+        # summary(
+        #     model=summary_encoder,
+        #     # Encoder.forward(input, hidden)需要两个位置参数，所以这里传入二元组。
+        #     input_data=(summary_x, summary_hidden),
+        #     # 显示到第2层，能够看到Encoder下面的Embedding层和GRU层。
+        #     depth=2,
+        #     # 指定表格中需要展示的列。
+        #     col_names=("input_size", "output_size", "num_params", "trainable"),
+        #     # 使用模型中定义的变量名显示层名称，例如ebd和gru。
+        #     row_settings=("var_names",),
+        #     # verbose=1表示直接把结构摘要打印到控制台。
+        #     verbose=1,
+        # )
+        # print("---------------------------------------------------------------\n")
 
         ########################################################################
 
