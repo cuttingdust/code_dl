@@ -50,6 +50,7 @@ outputs/
 wandb/
 mlruns/
 tensorboard/
+seq2seq_encoder_structure.png
 *.ckpt
 *.onnx
 *.pt
