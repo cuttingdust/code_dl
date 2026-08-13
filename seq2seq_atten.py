@@ -6,11 +6,16 @@ import os
 import copy
 import functools
 import inspect
+import socket
+import subprocess
+import sys
 import time
+import webbrowser
 import torch
 import torch.nn as nn
 from torchinfo import summary
 from torchview import draw_graph
+from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 import re
@@ -110,6 +115,82 @@ class MPoint:
 
         # 返回False表示不吞掉异常：如果被跟踪代码出错，程序仍然按正常方式抛出异常。
         return False
+
+
+####################################################################################################
+
+
+def start_tensorboard(log_dir, port=6007):
+    """
+    自动启动TensorBoard，并在默认浏览器中打开计算图页面。
+
+    平常手动启动TensorBoard使用的是：
+        tensorboard --logdir ./runs --port 6007
+
+    这个函数只是把上述操作交给Python自动完成：
+    1. 检查指定端口是否已有TensorBoard服务；
+    2. 没有服务时，在后台启动TensorBoard；
+    3. 等待服务可以访问后，自动打开浏览器。
+
+    :param log_dir: TensorBoard事件文件所在目录
+    :param port: 本地服务端口，默认使用6007
+    :return: TensorBoard计算图页面地址
+    """
+    host = "127.0.0.1"
+    absolute_log_dir = os.path.abspath(log_dir)
+    url = f"http://{host}:{port}/#graphs"
+
+    # connect_ex()返回0，表示该端口已经有服务监听。
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
+        is_running = client.connect_ex((host, port)) == 0
+
+    if not is_running:
+        command = [
+            sys.executable,
+            "-m",
+            "tensorboard.main",
+            "--logdir",
+            absolute_log_dir,
+            "--host",
+            host,
+            "--port",
+            str(port),
+        ]
+
+        # 不把TensorBoard的运行日志混入当前示例的控制台输出。
+        process_options = {
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+        }
+
+        if os.name == "nt":
+            # Windows下隐藏后台TensorBoard进程的命令行窗口。
+            process_options["creationflags"] = subprocess.CREATE_NO_WINDOW
+        else:
+            # Linux和macOS下让后台服务脱离当前Python进程。
+            process_options["start_new_session"] = True
+
+        subprocess.Popen(command, **process_options)
+
+        # 最多等待10秒，但服务一旦启动成功就立即结束等待。
+        for _ in range(50):
+            time.sleep(0.2)
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
+                if client.connect_ex((host, port)) == 0:
+                    is_running = True
+                    break
+
+    if is_running:
+        print(f"TensorBoard已启动：{url}")
+        webbrowser.open(url)
+    else:
+        print(
+            "TensorBoard自动启动失败，可以手动执行：\n"
+            f'\t"{sys.executable}" -m tensorboard.main '
+            f'--logdir "{absolute_log_dir}" --port {port}'
+        )
+
+    return url
 
 
 ####################################################################################################
@@ -458,6 +539,38 @@ def use_encoder() -> None:
 
         ########################################################################
 
+        # # 3.2- 使用TensorBoard记录并显示Encoder计算图
+        # #
+        # # 三个网络查看工具的侧重点不同：
+        # #   torchinfo：在控制台查看每层的形状和参数量；
+        # #   torchview：生成一张静态的网络结构图片；
+        # #   TensorBoard：在浏览器中交互式查看计算图。
+        # tensorboard_log_dir = os.path.join("runs", "seq2seq_encoder")
+        #
+        # # add_graph()会真实调用一次forward()。复制一份CPU模型专门生成计算图，
+        # # 避免移动或改变下面正式前向传播使用的my_encoder。
+        # tensorboard_encoder = copy.deepcopy(my_encoder).cpu()
+        # tensorboard_encoder.eval()
+        #
+        # # 直接使用当前DataLoader批次产生的真实张量，不硬编码任何形状。
+        # tensorboard_x = x.detach().cpu()
+        # tensorboard_hidden = hidden.detach().cpu()
+        #
+        # # SummaryWriter把计算图写入TensorBoard事件文件。
+        # # with代码块结束时会自动刷新并关闭文件。
+        # with SummaryWriter(log_dir=tensorboard_log_dir) as writer:
+        #     # Encoder.forward(input, hidden)有两个输入，因此这里传入二元组。
+        #     writer.add_graph(
+        #         model=tensorboard_encoder,
+        #         input_to_model=(tensorboard_x, tensorboard_hidden),
+        #     )
+        #
+        # print(f"TensorBoard计算图已写入：{os.path.abspath(tensorboard_log_dir)}")
+        #
+        # # 自动启动后台服务并打开Graphs页面；端口已有服务时不会重复启动。
+        # start_tensorboard(log_dir=tensorboard_log_dir, port=6007)
+
+        ########################################################################
         # 3.3- 前向传播
         output, hidden = my_encoder(x, hidden)
 
