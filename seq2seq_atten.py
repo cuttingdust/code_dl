@@ -3,11 +3,13 @@
 """
 
 import os
+import copy
 import functools
 import inspect
 import time
 import torch
 import torch.nn as nn
+from torchview import draw_graph
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 import re
@@ -372,7 +374,51 @@ def use_encoder() -> None:
         # 3.1- 初始化隐藏状态
         hidden = my_encoder.init_hidden()
 
-        # 3.2- 前向传播
+        ########################################################################
+
+        # # 3.2- 使用当前批次的真实x和hidden生成Encoder网络结构图
+        # #
+        # # torchview会实际调用一次模型的forward()。为了保证绘图过程不会改变
+        # # 原来的my_encoder、x和hidden，这里分别创建只用于绘图的副本。
+        # #
+        # # deepcopy()会复制出一个独立的Encoder对象：
+        # #   my_encoder：继续用于下面真正的前向传播
+        # #   graph_encoder：只用于torchview生成结构图
+        # graph_encoder = copy.deepcopy(my_encoder).cpu()
+        # graph_encoder.eval()
+        #
+        # # x和hidden的形状直接来自当前DataLoader批次，不再硬编码句子长度、
+        # # batch_size或hidden_size。detach()表示绘图不需要记录原张量的梯度关系，
+        # # cpu()则保证绘图不依赖CUDA和cuDNN。
+        # graph_x = x.detach().cpu()
+        # graph_hidden = hidden.detach().cpu()
+        #
+        # encoder_graph = draw_graph(
+        #     model=graph_encoder,
+        #     input_data=(graph_x, graph_hidden),
+        #     graph_name="Seq2SeqEncoder",
+        #     device="cpu",
+        #     show_shapes=True,
+        #     expand_nested=True,
+        #     roll=True,
+        #     graph_dir="TB",
+        #     save_graph=False,
+        # )
+        #
+        # # draw_graph()返回Graphviz图对象，再将它渲染成PNG文件。
+        # # cleanup=True表示生成PNG后删除中间的Graphviz源文件。
+        # encoder_graph.visual_graph.render(
+        #     filename="seq2seq_encoder_structure",
+        #     directory=".",
+        #     format="png",
+        #     cleanup=True,
+        # )
+        #
+        # print("Encoder网络结构图已生成：seq2seq_encoder_structure.png")
+
+        ########################################################################
+
+        # 3.3- 前向传播
         output, hidden = my_encoder(x, hidden)
 
         print(f"2-output形状-->{output.shape}")  # 1,词的个数,256
@@ -382,6 +428,7 @@ def use_encoder() -> None:
 
 
 if __name__ == "__main__":
+
     # content = " i LOVE heima! "
     # content = " i LOVE hei@ma! "
     # print(f"-{normalize_string(content)}-")
