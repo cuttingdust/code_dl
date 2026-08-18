@@ -7,6 +7,7 @@ import torch.nn as nn
 from torch import Tensor
 
 import math
+import copy
 
 
 def attention(
@@ -81,5 +82,133 @@ def use_attention():
     print(f"解码器C：{decoder_attention_C.shape}-->{decoder_attention_C}")
     print(f"解码器C权重：{decoder_attention_weight.shape}-->{decoder_attention_weight}")
 
+
+def clones(model_obj, nums):
+    """
+    创建指定个数的相同网络结构对象
+    :param model_obj: 网络结构对象
+    :param nums: 个数
+    :return: 网络结构对象列表
+    """
+    # 语法 nn.ModuleList([copy.deepcopy(模型对象) for _ in range(深拷贝复制的个数)])
+    return nn.ModuleList([copy.deepcopy(model_obj) for _ in range(nums)])
+
+
+class MultiHeadAttention(nn.Module):
+    def __init__(self, d_model, head, dropout=0.1):
+        """
+        初始化
+        :param d_model: 词向量维度/隐藏层隐藏状态向量维度。例如：512
+        :param head: 多头的头数。例如：8
+        :param dropout_p: 随机失活概率
+        """
+
+        # 1- 确定d_model能够被head整除
+        assert d_model % head == 0
+
+        # 2- 初始化父类
+        super().__init__()
+
+        # 3- 设置属性值
+        self.d_model = d_model
+        self.head = head
+        self.head_dim = d_model // head  # 每个头分别处理的数据维度。例如：64
+        self.dropout = nn.Dropout(p=dropout)
+
+        # 4- 搭建网络结构
+        """
+            4个线性层的作用如下：
+                第1个线性层：专门用来query进行线性处理，决定“当前词在找什么东西”
+                第2个线性层：专门用来key进行线性处理，决定“其他词能够提供什么信息”
+                第3个线性层：专门用来value进行线性处理，决定“其他词的信息的重要程度是什么样的”
+                第4个线性层：对多头并行处理，并且concat拼接后的张量做最终的线性处理，让数据变得更加平稳
+        """
+        self.linear_list = clones(
+            nn.Linear(in_features=d_model, out_features=d_model), 4
+        )
+
+        # 5- 权重张量
+        self.weight = None
+
+    def forward(self, query: Tensor, key: Tensor, value: Tensor, mask: Tensor = None):
+        """
+        前向传播：多头注意力计算
+        :param query: 查询张量，形状：[batch_size每个批次中有多少条句子,seq_len每条句子中有几个词,d_model词向量的维度/隐藏状态维度]
+        :param key: 键张量，形状：[batch_size,seq_len,d_model]
+        :param value: 值张量，形状：[batch_size,seq_len,d_model]
+        :param mask: 掩码张量，形状：[head,seq_len,seq_len]。注意第一个维度代表的是头数
+        :return:
+        """
+        # 1- 掩码处理：进行升维，3维变4维
+        if mask is not None:
+            # 例如：[8,4,4] -> [1,8,4,4]
+            # 不管每个批次中有多少条句子，每条句子用的掩码是同一份
+            mask = mask.unsqueeze(0)
+
+        # 2- 获得batch_size，也就是批次中句子的条数
+        batch_size = query.shape[0]
+
+        # 3- 前3个线性层分别并行对QKV进行处理
+        # 方式一：分开版
+        # [(Linear,query), (Linear,key), (Linear,value)]
+        linear_output_list = []
+        model_and_data_list = list(zip(self.linear_list, (query, key, value)))
+        for model, data in model_and_data_list:
+            """
+            1- model(data)：线性变换
+            2- reshape：[2,4,512]->[2,4,8,64]
+            3- transpose：[2,4,8,64]->[2,8,4,64]
+            """
+            model_output = model(data)
+            reshape_output = model_output.reshape(
+                batch_size, -1, self.head, self.head_dim
+            )
+            linear_output_list.append(reshape_output.transpose(1, 2))
+        new_query, new_key, new_value = linear_output_list
+
+        # 方式二：合并版【理解】
+        # new_query, new_key, new_value = [
+        #     model(data)
+        #     .reshape(batch_size, -1, self.head, self.head_dim)
+        #     .transpose(1, 2)
+        #     for model, data in list(zip(self.linear_list, (query, key, value)))
+        # ]
+
+        # 4- 多头并行计算注意力
+        C, weight = attention(
+            new_query, new_key, new_value, mask=mask, dropout=self.dropout
+        )
+        self.weight = weight
+
+        # 5- 对多头处理后的数据进行拼接
+        # [2,8,4,64] -> [2,4,8,64] -> [2,4,512]
+        result = C.transpose(1, 2).reshape(batch_size, -1, self.head * self.head_dim)
+
+        # 6- 调用最后一个线性层对拼接后的数据进行处理，让模型更加稳定
+        return self.linear_list[-1](result)
+
+
+# 测试多头注意力计算
+def use_multi_head_attention():
+    # 1- 获取位置编码之后的词数据
+    position_data = use_positional_encoding()
+
+    # 2- query、key、value参数
+    query = key = value = position_data
+
+    # 3- 创建多头注意力实例对象
+    mask = torch.triu(torch.ones(size=(8, 4, 4)))
+    my_attention = MultiHeadAttention(d_model=512, head=8, dropout=0.1)
+
+    # 4- 调用前向传播
+    result = my_attention(query, key, value, mask=mask)
+    print(f"多头注意力计算结果：{result.shape}")
+    print(f"多头注意力计算结果：{result}")
+
+    return result
+
+
 if __name__ == "__main__":
-    use_attention()
+    # use_attention()
+
+    use_multi_head_attention()
