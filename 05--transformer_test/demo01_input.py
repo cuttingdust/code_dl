@@ -146,6 +146,8 @@ def use_positional_encoding():
     print(f"最终的形状：{result.shape}")
     print(f"最终的值：{result}")
 
+    return result
+
 
 # 可视化位置编码
 def plot_position():
