@@ -3,14 +3,24 @@
 """
 
 import os
+
+# 注意：1- 代码放在整个文件的最上面；2- 0需要是字符串的类型
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
+
 import copy
+import re
+import random
 import functools
 import inspect
 import socket
 import subprocess
 import sys
 import time
+
+from tqdm import tqdm
 import webbrowser
+import matplotlib.pyplot as plt
+
 import torch
 import torch.nn as nn
 from torchinfo import summary
@@ -18,7 +28,6 @@ from torchview import draw_graph
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
-import re
 
 # 1- 定义变量
 # 运行设备
@@ -408,9 +417,9 @@ class Encoder(nn.Module):
             输入参数input形状：[batch_size每个批次中有几个句子,seq_len每条句子中词的个数]
             结果参数embed形状：[batch_size每个批次中有几个句子,seq_len每条句子中词的个数,input_size词向量维度]
         """
-        print("0-input形状-->", input.shape)
+        # print("0-input形状-->", input.shape)
         embed = self.ebd(input)
-        print("1-embed形状-->", embed.shape)
+        # print("1-embed形状-->", embed.shape)
 
         # 2- GRU层
         """
@@ -621,6 +630,587 @@ def use_encoder() -> None:
         break
 
 
+# 8- 解码器：无注意力机制
+class Decoder(nn.Module):
+    def __init__(self, vocab_size, hidden_size):
+        """
+        :param vocab_size:  解码器中词汇表大小，也就是法语词的个数4345个
+        :param hidden_size: 隐藏层隐藏状态的向量维度。
+            因为是人为设置embedding_dim和hidden_size，因此该参数也表示词向量的维度。但是你可以设置的不一致
+        """
+
+        # 1- 初始化父类
+        super().__init__()
+
+        # 2- 设置属性值
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+
+        # 3- 搭建网络结构
+        # 3.1- 词嵌入层
+        self.embedding = nn.Embedding(
+            num_embeddings=self.vocab_size, embedding_dim=self.hidden_size
+        )
+
+        # 3.2- 循环网络层：GRU
+        self.gru = nn.GRU(
+            input_size=self.hidden_size,
+            hidden_size=self.hidden_size,
+            num_layers=1,
+            batch_first=True,
+        )
+        # 3.3- 线性层
+        self.out = nn.Linear(in_features=self.hidden_size, out_features=vocab_size)
+
+        # 3.4- 输出的激活函数
+        self.softmax = nn.LogSoftmax(dim=-1)
+
+    def forward(self, input, hidden):
+        """
+        前向传播。翻译得到法语词
+        :param input: 上一个时间步的预测法语词的词索引（也就是要将上个时间步预测结果作为本次输入使用），
+            张量形状：[1每个批次中法语句子的条数,1每次只传递一个法语词]。数据内容举例：[[法语词索引]]
+        :param hidden: 上一个时间步的隐藏状态，张量形状：[num_layers,batch_size,hidden_size]
+        :return:
+        """
+        print(f"1-input形状-->{input.shape}")
+        print(f"2-hidden形状-->{hidden.shape}")
+        # 1- 调用词嵌入层：输入词索引，得到词向量
+        ebd = torch.relu(self.embedding(input))
+        print(f"3-ebd形状-->{ebd.shape}")
+
+        # 2- 调用GRU
+        """
+            因为前面__init__中设置了batch_first为True，因此只会影响ebd和output的张量形状
+
+            输入参数形状：
+                ebd：    [batch_size,seq_len,hidden_size]
+                hidden： [num_layers,batch_size,hidden_size]
+
+            返回结果形状：
+                output： [batch_size,seq_len,hidden_size]
+                hidden： [num_layers,batch_size,hidden_size]
+        """
+        output, hidden = self.gru(ebd, hidden)
+        print(f"4-output形状-->{output.shape}")
+
+        # 3- 调用线性层和激活函数，得到预测的概率值
+        # 3.1- 将output降维为二维：因为线性层只能处理二维数据
+        """
+            output[-1]针对：分类场景，也就是N vs 1的情况。取得是最后一个时间步的隐藏状态。一条句子彻底理解完以后才得到最终的预测结果
+            output[0]针对：翻译、文本生成的场景，也就是N vs M的情况。取得是第一个时间步的隐藏状态。一次只生成一个词，并将该词作为下一步的输入
+        """
+        output = output[0]
+        print(f"5-output[0]形状-->{output.shape}")
+
+        # 3.2- 调用线性层
+        output = self.softmax(self.out(output))
+
+        # 4- 返回
+        return output, hidden
+
+    def init_hidden(self):
+        return torch.zeros(size=(1, 1, self.hidden_size), device=device)
+
+
+# 9- 测试解码器
+@MPoint(append_message="测试无注意力机制的解码器")
+def use_decoder() -> None:
+    # 1- 准备数据
+    dataloader = get_dataloader()
+
+    # 2- 创建编码器和解码器
+    my_encoder = Encoder(vocab_size=english_word_n, input_size=256, hidden_size=256).to(
+        device=device
+    )
+    print("my_encoder --> ")
+    print(my_encoder)
+
+    my_decoder = Decoder(vocab_size=french_word_n, hidden_size=256).to(device=device)
+    print("my_decoder --> ")
+    print(my_decoder)
+
+    # 3- 遍历数据加载器进行翻译
+    for x, y in dataloader:
+        # x是英语句子，里面存放的是单词的索引。张量形状[batch_size,seq_len]
+        # y是法语句子，里面存放的是单词的索引。张量形状[batch_size,seq_len]
+
+        # 3.1- 先调用编码器
+        h0 = my_encoder.init_hidden()
+        print(f"h0-->{h0.shape}")
+        output, h0 = my_encoder(x, h0)
+
+        print(f"y-->{y.shape}")
+        # 3.2- 再调用解码器。要一个一个法语词传递进解码器
+        for t in range(y.shape[1]):
+            # 3.3- 先提取法语词的索引，再将索引变成二维张量，最终形状是[[法语词索引]]
+            french_word_index_2dtensor = y[0][t].reshape(1, -1)
+            print(f"y={y}，y[0]={y[0]}，y[0][t]={y[0][t]}")
+            print(f"french_word_index_2dtensor={french_word_index_2dtensor}")
+
+            # 3.4- 调用解码器
+            output, hidden = my_decoder(french_word_index_2dtensor, h0)
+
+            print(f"output形状-->{output.shape}")
+
+        break  # 只跑一对英语句子和法语句子
+
+
+# 10- 解码器：有注意力机制
+class AttnDecoder(nn.Module):
+    def __init__(self, vocab_size, hidden_size, dropout_p=0.1):
+        """
+        :param vocab_size:  解码器中词汇表大小，也就是法语词的个数4345个
+        :param hidden_size: 隐藏层隐藏状态的向量维度。
+            因为是人为设置embedding_dim和hidden_size，因此该参数也表示词向量的维度。但是你可以设置的不一致
+        :param dropout_p 失活性 简化结构 提高效率
+        """
+
+        # 1- 初始化父类
+        super().__init__()
+
+        # 2- 设置属性值
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.drouput_p = dropout_p
+
+        # 3- 搭建网络结构
+        # 3.1- 词嵌入层
+        self.embedding = nn.Embedding(
+            num_embeddings=self.vocab_size, embedding_dim=self.hidden_size
+        )
+        # 词嵌入层后面的随机失活层
+        self.dropout = nn.Dropout(p=self.drouput_p)
+
+        # 3.2- 线性层：用来计算Q和K拼接后的相似性
+        self.attn = nn.Linear(
+            in_features=self.hidden_size + self.hidden_size, out_features=MAX_LENGTH
+        )
+
+        # 3.3- 线性层：拼接【上一个时间步翻译结果法语词的词向量】和【专属信息包】，然后将张量形状调整为GRU要求的形状
+        self.attn_combine = nn.Linear(
+            in_features=self.hidden_size + self.hidden_size, out_features=hidden_size
+        )
+
+        # 3.4- 循环网络层：GRU
+        self.gru = nn.GRU(
+            input_size=self.hidden_size,
+            hidden_size=self.hidden_size,
+            num_layers=1,
+            batch_first=True,
+        )
+        # 3.5- 线性层：输出层
+        self.out = nn.Linear(in_features=self.hidden_size, out_features=vocab_size)
+
+        # 3.6- 输出的激活函数
+        self.softmax = nn.LogSoftmax(dim=-1)
+
+    def forward(self, input, key, value):
+        """
+        :param input: 上一个时间步的预测法语词的词索引。张量形状：[batch_size,seq_len]。seq_len后续我们是一个个法语词进行传递
+        :param key: 上一个时间步的隐藏状态，也就是流程图中的prev_hidden。张量形状：[num_layers,batch_size,hidden_size]
+        :param value: 编码器端多个词的隐藏状态拼接后的张量。张量形状：[batch_size,seq_len是固定值为MAX_LENGTH,hidden_size]
+        :return:
+        """
+        # 1- input转成词向量，也就是得到Q
+        # 方式一：分步骤的版本
+        # ebd = self.embedding(input)
+        # embedded = self.dropout(ebd)
+
+        # 方式二：合并的版本
+        Q = self.dropout(self.embedding(input))
+
+        # 2- Q和K拼接；算相似性；相似性转成权重
+        # 方式一：分步骤的版本
+        qk_concat = torch.cat((Q, key), dim=-1)  # Q和K拼接
+        qk_score = self.attn(qk_concat)  # 算相似性
+        attn_weights = torch.softmax(qk_score, dim=-1)  # 相似性转成权重
+
+        # 方式二：合并的版本
+        # attn_weights = torch.softmax(self.attn(torch.concat((Q,key),dim=-1)), dim=-1)
+
+        # 3- 权重矩阵和value进行矩阵乘法运算，得到专属信息包
+        attn_applied = torch.bmm(attn_weights, value)
+
+        # 4- 【上一个时间步的预测法语词的词向量】和【专属信息包】拼接；调整拼接后的形状，达到GRU的输入要求
+        qc_contact = torch.cat(
+            (Q, attn_applied), dim=-1
+        )  # 【上一个时间步的预测法语词的词向量】和【专属信息包】拼接
+
+        gru_input = torch.relu(self.attn_combine(qc_contact))
+
+        # 5- 调用GRU
+        output, hidden = self.gru(gru_input, key)
+
+        # 6- 计算预测概率
+        output = output[0]
+        output = self.softmax(self.out(output))
+
+        # 7- 返回结果
+        return output, hidden, attn_weights
+
+    def init_hidden(self):
+        return torch.zeros(size=(1, 1, self.hidden_size), device=device)
+
+
+# 11- 测试解码器
+@MPoint(append_message="测试有注意力机制的解码器")
+def use_attn_decoder() -> None:
+    # 1- 准备数据
+    dataloader = get_dataloader()
+
+    # 2- 创建编码器和解码器
+    my_encoder = Encoder(vocab_size=english_word_n, input_size=256, hidden_size=256).to(
+        device=device
+    )
+    print("my_encoder --> ")
+    print(my_encoder)
+
+    my_decoder = AttnDecoder(vocab_size=french_word_n, hidden_size=256).to(
+        device=device
+    )
+    print("my_decoder --> ")
+    print(my_decoder)
+
+    # 3- 遍历数据加载器进行翻译
+    for x, y in dataloader:
+        # x是英语句子，里面存放的是单词的索引。张量形状[batch_size,seq_len]
+        # y是法语句子，里面存放的是单词的索引。张量形状[batch_size,seq_len]
+
+        # 3.1- 先调用编码器
+        # 3.1.1- 解码器
+        h0 = my_encoder.init_hidden()
+        print(f"h0-->{h0.shape}")
+        output, hidden = my_encoder(x, h0)
+
+        # 3.1.2- 句子长度规范处理。统一到词个数为10的长度
+        # 初始化一个[1,MAX_LENGTH,256]的全0张量
+        value = torch.zeros(size=(1, MAX_LENGTH, 256), device=device)
+        # 计算需要复制的词个数
+        copy_len = min(MAX_LENGTH, x.shape[1])  # x.shape[1]获取当前英语句子中词的个数
+
+        # 将已有的数据复制到value中
+        """
+            为什么用output而不使用hidden来取隐藏状态信息数据？
+            答：output记录的是最后一层，每个时间步的隐藏状态
+               hidden记录的是每一层，最后一个时间步的隐藏状态
+               但是value，是编码器端每个词的隐藏状态的拼接
+        """
+        value[:, :copy_len, :] = output[:, :copy_len, :]
+
+        print(f"y-->{y.shape}")
+        # 3.2- 再调用解码器。要一个一个法语词传递进解码器
+        for t in range(y.shape[1]):
+            # 3.3- 先提取法语词的索引，再将索引变成二维张量，最终形状是[[法语词索引]]
+            french_word_index_2dtensor = y[0][t].reshape(1, -1)
+            print(f"y={y}，y[0]={y[0]}，y[0][t]={y[0][t]}")
+            print(f"french_word_index_2dtensor={french_word_index_2dtensor}")
+
+            # 3.4- 调用解码器
+            output, hidden, attn_weights = my_decoder(
+                french_word_index_2dtensor, hidden, value
+            )
+
+            print(f"解码output.shape: {output.shape}")  # [1, 4345]
+            print(f"解码hidden.shape: {hidden.shape}")  # [1, 1, 256]
+            print(f"解码att_weights: {attn_weights}")
+            print(f"解码att_weights和: {attn_weights.sum()}")
+            print(f"解码att_weights.shape: {attn_weights.shape}")  # [1, 1, 10]
+
+            print("-" * 30)
+        break  # 只跑一对英语句子和法语句子
+
+
+# 12- 模型训练
+# 12.1- 单次的训练过程
+def train_iters(x, y, my_encoder, my_decoder, encoder_adam, decoder_adam, loss) -> None:
+    """
+    单对样本的训练代码
+    :param x: 英语句子，特征数据，形状：[batch_size,seq_len]
+    :param y: 法语句子，目标值，形状：[batch_size,seq_len]
+    :param my_encoder: 编码器
+    :param my_decoder: 解码器
+    :param encoder_adam: 编码器优化器
+    :param decoder_adam: 解码器优化
+    :param loss:损失函数对象
+    :return: 单条样本数据的平均损失值
+    """
+    # 1- 调用编码器
+    encoder_hidden = my_encoder.init_hidden()
+    encoder_output, encoder_hidden = my_encoder(x, encoder_hidden)
+
+    # 2- 句子长度规范
+    # 2.1- 初始化全零的张量，形状[batch_size,MAX_LENGTH,hidden_size]
+    value = torch.zeros(size=(1, MAX_LENGTH, 256), device=device)
+    # 2.2- 计算复制的长度
+    copy_len = min(MAX_LENGTH, x.shape[1])
+    # 2.3- 复制值
+    value[:, :copy_len, :] = encoder_output[:, :copy_len, :]
+
+    # 3- 参数设置
+    # 3.1- 将 编码器最后一个时间步的隐藏状态作为解码器的初始隐藏状态使用
+    decoder_hidden = encoder_hidden
+    # 3.2- 在法语句子的前面增加SOS_TOKEN，标记翻译工作的开始
+    input_y = torch.tensor([[SOS_TOKEN]], device=device)
+    # 3.3- 初始损失值
+    loss_value = torch.tensor(data=0.0, device=device)
+    # 3.4- 获得当前法语句子中法语词的个数
+    y_len = y.shape[1]
+    # 3.5- teacher_forcing机制的使用标识
+    teacher_forcing_flag = True if random.random() < 0.5 else False
+
+    # 4- 调用解码器
+    if teacher_forcing_flag:
+        # 4.1- 使用teacher_forcing机制
+
+        for t in range(y_len):
+            # 解码器的前向传播
+            # 注意：输入进去和得到的隐藏状态的变量名称要完全相同，为了持续的将隐藏状态往下个时间步传递
+            output, decoder_hidden, attn_weights = my_decoder(
+                input_y, decoder_hidden, value
+            )
+
+            # 计算损失值
+            y_true = y[0][t].reshape(1)  # 法语真实值的词索引
+            loss_value += loss(output, y_true)
+
+            # 告知解码器下一个时间步真实的目标值是多少
+            input_y = y[0][t].reshape(1, -1)  # [[词索引]]
+    else:
+        # 4.2- 不使用。普通的训练过程
+        for t in range(y_len):
+            # 解码器的前向传播
+            # 注意：输入进去和得到的隐藏状态的变量名称要完全相同，为了持续的将隐藏状态往下个时间步传递
+            output, decoder_hidden, attn_weights = my_decoder(
+                input_y, decoder_hidden, value
+            )
+
+            # 计算损失值
+            y_true = y[0][t].reshape(1)  # 法语真实值的词索引
+            loss_value += loss(output, y_true)
+
+            # 将上一个时间步的预测结果（topi.detach()），作为【本次输出input_y】传递给到下一个时间步
+            topv, topi = output.topk(1)  # 只取预测概率最高的那个词
+            y_pred_index = topi.detach()
+            if y_pred_index == EOS_TOKEN:
+                # 说明到了句子的结尾。那么就结束翻译工作怪
+                break
+            input_y = y_pred_index
+
+    # 5- 反向传播固定代码
+    # 梯度清零
+    encoder_adam.zero_grad()
+    decoder_adam.zero_grad()
+
+    # 反向传播
+    loss_value.sum().backward()
+
+    # 更新参数
+    encoder_adam.step()
+    decoder_adam.step()
+
+    # 6- 返回平均损失
+    return loss_value.item() / y_len
+
+
+# 12.2- 整体训练流程
+def train() -> None:
+    # 1. 获取数据集加载器对象
+    dataloader = get_dataloader()
+
+    # 2. 模型初始化
+    size = 256
+    my_encoder = Encoder(
+        vocab_size=english_word_n, input_size=size, hidden_size=size
+    ).to(device=device)
+    my_decoder = AttnDecoder(vocab_size=french_word_n, hidden_size=size).to(
+        device=device
+    )
+
+    # 3. 优化器初始化
+    encoder_adam = torch.optim.Adam(params=my_encoder.parameters(), lr=1e-4)
+    decoder_adam = torch.optim.Adam(params=my_decoder.parameters(), lr=1e-4)
+
+    # 4. 损失函数初始化. 使用 NLLLoss() 负数对数似然损失
+    loss = nn.NLLLoss()
+
+    # 5. 训练参数初始化
+    epochs = 1
+    plot_avg_loss_list = []  # 平均损失值列表，用来画图
+
+    # 6. 循环训练
+    for epoch in range(epochs):
+        # 6.1 外层循环, 控制训练轮数
+
+        plot_total_loss = 0.0
+        print_total_loss = 0.0
+
+        # 6.2 内层循环, 遍历数据集的每个样本(即: 每轮具体的训练过程)
+        for index, (x, y) in enumerate(tqdm(dataloader), start=1):
+            """
+            index：样本条数
+            x：英语句子
+            y：法语句子
+            """
+            # 具体训练过程看下面的步骤
+            myloss = train_iters(
+                x,
+                y,
+                my_encoder,
+                my_decoder,
+                encoder_adam=encoder_adam,
+                decoder_adam=decoder_adam,
+                loss=loss,
+            )
+
+            plot_total_loss += myloss
+            print_total_loss += myloss
+
+            # 6.3 记录损失用于绘图(每100个样本记录一次)
+            if index % 100 == 0:
+                # 计算平均损失 = 总损失 / 100
+                avg_loss = plot_total_loss / 100
+                # 记录指标
+                plot_avg_loss_list.append(avg_loss)
+                plot_total_loss = 0.0
+
+            # 6.4 打印训练日志 (每1000个样本打印一次)
+            if index % 1000 == 0:
+                # 计算平均损失 = 总损失 / 1000
+                avg_loss = print_total_loss / 1000
+                print(f"第{epoch+1}轮次，已训练的样本条数{index}，平均损失是{avg_loss}")
+                print_total_loss = 0.0
+
+            # if index > 1000:
+            #     break
+
+        torch.save(my_encoder.state_dict(), r"model/encoder.pkl")
+        torch.save(my_decoder.state_dict(), r"model/decoder.pkl")
+
+        # 8. 训练结束后, 绘制损失曲线
+        plt.figure()
+        plt.plot(plot_avg_loss_list)
+        plt.show()
+
+
+# 13- 模型预测
+# 13.1- 单条英语句子的翻译
+def seq2seq_evaluate(x, my_encoder, my_decoder):
+    with torch.no_grad():
+        # 1- 调用编码器：让模型理解英语句子的意思
+        encoder_hidden = my_encoder.init_hidden()
+        encoder_output, encoder_hidden = my_encoder(x, encoder_hidden)
+
+        # 2- 句子长度规范
+        # 2.1- 初始化全零的张量。形状：[1,MAX_LENGTH,256]
+        value = torch.zeros(size=(1, MAX_LENGTH, 256), device=device)
+        # 2.2- 计算拷贝的长度
+        copy_len = min(MAX_LENGTH, x.shape[1])
+        # 2.3- 复制数据
+        value[:, :copy_len, :] = encoder_output[:, :copy_len, :]
+        # 3- 定义变量
+        # 3.1- 解码器的初始隐藏状态：来自编码器端最后一个时间步的隐藏状态
+        decoder_hidden = encoder_hidden
+        # 3.2- 翻译工作的开始
+        input_y = torch.tensor([[SOS_TOKEN]], device=device)
+        # 3.3- 记录解码器端每个时间步对应的权重分布
+        decoder_attention = torch.zeros(
+            size=(MAX_LENGTH, MAX_LENGTH), device=device
+        )  # 形状[10个法语词,10个权重值]
+        # 3.4- 翻译的法语词列表
+        french_word_list = []
+
+        # 4- 开始翻译
+        for t in range(MAX_LENGTH):
+            # 4.1- 调用解码器
+            output, decoder_hidden, attn_weights = my_decoder(
+                input_y, decoder_hidden, value
+            )
+            # 4.2- 记录权重的分布
+            decoder_attention[t] = attn_weights
+            # 4.3- 得到预测概率最高的那一个法语词
+            # 4.3.1- 先得到最高词的词索引
+            topv, topi = output.topk(1)
+            french_word_index = topi.squeeze().item()
+            print(f"topi-->{topi}-->{topi.squeeze()}-->{topi.squeeze().item()}")
+
+            # 4.3.2- 判断是否到了句子的结束标识
+            if french_word_index == EOS_TOKEN:
+                french_word_list.append("EOS")
+                break
+            else:
+                # 4.3.3- 词索引转成文字内容
+                french_word_list.append(french_index2word[french_word_index])
+
+            # 4.3.4- 本次的预测结果法语词索引作为下个时间步的输入数据使用
+            input_y = torch.tensor([[french_word_index]], device=device)
+
+        return french_word_list, decoder_attention
+
+
+def use_seq2seq_evaluate():
+    # 1 - 准备数据
+    # 因为以后是手动准备需要翻译的数据，因此不需要加载数据
+    # get_dataloader()
+
+    # 2- 加载训练好的模型
+    size = 256
+    my_encoder = Encoder(
+        vocab_size=english_word_n, input_size=size, hidden_size=size
+    ).to(device=device)
+    my_encoder.load_state_dict(torch.load(r"model/encoder.pkl"))
+
+    my_decoder = AttnDecoder(vocab_size=french_word_n, hidden_size=size).to(
+        device=device
+    )
+    # weights_only：只从训练好的模型中加载权重信息，其他信息不加载。作用：加快模型的加载速度
+    my_decoder.load_state_dict(torch.load(r"model/decoder.pkl"))
+
+    # 3- 准备数据
+    my_samplepairs = [
+        [
+            "i m impressed with your french .",
+            "je suis impressionne par votre francais .",
+        ],
+        ["i m more than a friend .", "je suis plus qu une amie ."],
+        ["she is beautiful like her mother .", "elle est belle comme sa mere ."],
+    ]
+
+    # 4- 翻译
+    for index, pair in enumerate(my_samplepairs):
+        x = pair[0]  # 英语句子
+        y = pair[1]  # 法语句子
+
+        # 4.1- 分词并且转成向量
+        x = [english_word2index[word] for word in x.split(" ")]
+        x.append(EOS_TOKEN)
+        x_tensor = torch.tensor(x, dtype=torch.long, device=device).reshape(1, -1)
+
+        # 4.2- 调用预测代码
+        french_word_list, decoder_attention = seq2seq_evaluate(
+            x_tensor, my_encoder, my_decoder
+        )
+
+        # 4.3- 打印结果内容
+        print(f"真实法语句子：{y}")
+        print(f"预测法语句子：{' '.join(french_word_list)}")
+        print(f"权重矩阵：{decoder_attention.shape}")
+        print(f"权重矩阵：{decoder_attention.sum()}")
+        print(f"权重矩阵：{decoder_attention}")
+
+        # 4.4- 绘制权重矩阵
+        # Matplotlib底层使用NumPy，只能处理CPU内存中的数据。
+        # decoder_attention当前位于cuda:0，因此绘图前需要：
+        # 1. detach()：与PyTorch计算图分离；
+        # 2. cpu()：从GPU显存复制到CPU内存；
+        # 3. numpy()：转换成NumPy数组。
+        attention_numpy = decoder_attention.detach().cpu().numpy()
+        plt.matshow(attention_numpy)
+        plt.show()
+
+        print("-" * 30)
+
+
 if __name__ == "__main__":
 
     # content = " i LOVE heima! "
@@ -651,4 +1241,14 @@ if __name__ == "__main__":
     # print("-" * 50)
     # print(french_index2word)
 
-    use_encoder()
+    # use_encoder()
+
+    print(french_word_n)
+
+    # use_decoder()
+
+    # use_attn_decoder()
+
+    # train()
+
+    use_seq2seq_evaluate()
