@@ -9,9 +9,9 @@ if __name__ == "__main__":
     注意：需要指定具体的分隔符sep，否则会报错pandas.errors.ParserError: Error tokenizing data. C error: Expected 6 fields in line 12, saw 8
     """
     train_df = pd.read_csv(
-        os.path.join("data", "train.tsv"), encoding="utf-8", sep="\t"
+        os.path.join("../data", "train.tsv"), encoding="utf-8", sep="\t"
     )
-    dev_df = pd.read_csv(os.path.join("data", "dev.tsv"), encoding="utf-8", sep="\t")
+    dev_df = pd.read_csv(os.path.join("../data", "dev.tsv"), encoding="utf-8", sep="\t")
 
     # 2- 创建一个画布，并在画布中创建两个子图
     """

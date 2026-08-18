@@ -64,7 +64,7 @@ if __name__ == "__main__":
 
     # 6- 【了解】可视化展示：展示词和词之间的相似性
     # 注意：runs的父目录不能有中文名称
-    summary = SummaryWriter(r"runs")
+    summary = SummaryWriter(r"../runs")
     summary.add_embedding(ebd.weight.data, index_word.values())
     summary.close()
     print("-" * 50)

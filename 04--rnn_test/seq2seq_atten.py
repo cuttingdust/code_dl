@@ -37,7 +37,7 @@ SOS_TOKEN = 0
 # 翻译结束标识的索引
 EOS_TOKEN = 1
 # 文件路径
-file_path = os.path.join(r"data", r"eng-fra-v2.txt")
+file_path = os.path.join(r"../data", r"eng-fra-v2.txt")
 # 句子长度规范中句子的最大长度
 MAX_LENGTH = 10
 
@@ -1084,8 +1084,8 @@ def train() -> None:
             # if index > 1000:
             #     break
 
-        torch.save(my_encoder.state_dict(), r"model/encoder.pkl")
-        torch.save(my_decoder.state_dict(), r"model/decoder.pkl")
+        torch.save(my_encoder.state_dict(), r"../model/encoder.pkl")
+        torch.save(my_decoder.state_dict(), r"../model/decoder.pkl")
 
         # 8. 训练结束后, 绘制损失曲线
         plt.figure()
@@ -1158,13 +1158,13 @@ def use_seq2seq_evaluate():
     my_encoder = Encoder(
         vocab_size=english_word_n, input_size=size, hidden_size=size
     ).to(device=device)
-    my_encoder.load_state_dict(torch.load(r"model/encoder.pkl"))
+    my_encoder.load_state_dict(torch.load(r"../model/encoder.pkl"))
 
     my_decoder = AttnDecoder(vocab_size=french_word_n, hidden_size=size).to(
         device=device
     )
     # weights_only：只从训练好的模型中加载权重信息，其他信息不加载。作用：加快模型的加载速度
-    my_decoder.load_state_dict(torch.load(r"model/decoder.pkl"))
+    my_decoder.load_state_dict(torch.load(r"../model/decoder.pkl"))
 
     # 3- 准备数据
     my_samplepairs = [

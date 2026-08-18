@@ -13,7 +13,7 @@ from torch.utils.data import TensorDataset
 # 1- 数据处理：文件->DataFrame->Tensor张量->Dataset->DataLoader
 def create_dataset():
     # 1- 读取文件
-    df = pd.read_csv(r"data/手机价格预测.csv", encoding="utf-8")
+    df = pd.read_csv(r"../data/手机价格预测.csv", encoding="utf-8")
 
     # 2- 拆分得到特征数据和目标值
     x = df.iloc[:, :-1]
@@ -167,7 +167,7 @@ def train_model(train_dataset, test_dataset, feature_nums, target_nums):
     model_dir.mkdir(parents=True, exist_ok=True)
 
     # 6- 保存训练好的模型
-    torch.save(model.state_dict(), "model/phone_price_model.pkl")
+    torch.save(model.state_dict(), "../model/phone_price_model.pkl")
 
 
 # 4- 模型预测：代码层面就是简化版的模型训练代码
@@ -180,7 +180,7 @@ def predict_model(test_dataset, feature_nums, target_nums):
     model = PhonePriceModel(feature_nums, target_nums)
 
     # 3- 加载训练好的模型
-    model.load_state_dict(torch.load("model/phone_price_model.pkl"))
+    model.load_state_dict(torch.load("../model/phone_price_model.pkl"))
 
     # 4- 预测
     model.eval()  # 切换为预测模式。禁止随机失活Dropout

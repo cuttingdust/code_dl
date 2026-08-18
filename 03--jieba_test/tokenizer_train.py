@@ -45,14 +45,14 @@ def demo01():
         print(f"{word}-->{one_hot}")
 
     # 4- 保存训练好的模型
-    joblib.dump(my_tokenizer, r"model/my_tokenizer.pkl")
+    joblib.dump(my_tokenizer, r"../model/my_tokenizer.pkl")
 
 
 def demo02():
     word = "李宗盛"
 
     # 1- 加载训练好的模型
-    my_tokenizer = joblib.load(r"model/my_tokenizer.pkl")
+    my_tokenizer = joblib.load(r"../model/my_tokenizer.pkl")
 
     # 2- 得到某个词的one-hot词向量
     # 2.1- 得到训练好的词和索引的映射关系

@@ -29,7 +29,7 @@ def demo02():
     # 1- 加载训练好的模型
     # model = fasttext.load_model("model/word2vec.pkl")
     # model = fasttext.load_model("model/word2vec2.pkl")
-    model = fasttext.load_model("model/word2vec3.pkl")
+    model = fasttext.load_model("../model/word2vec3.pkl")
 
     # 2- 获得某个词的词向量
     word_vec = model.get_word_vector("hello")
@@ -40,7 +40,7 @@ def demo03():
     # 1- 加载训练好的模型
     # model = fasttext.load_model("model/word2vec.pkl")
     # model = fasttext.load_model("model/word2vec2.pkl")
-    model = fasttext.load_model("model/word2vec3.pkl")
+    model = fasttext.load_model("../model/word2vec3.pkl")
 
     # 2- 获得相近的几个词
     # 会从词形、词义方面进行查找。

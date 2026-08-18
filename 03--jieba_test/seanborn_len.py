@@ -6,7 +6,7 @@ import pandas as pd
 
 def demo01():
     # 1- 读取数据
-    df = pd.read_csv(os.path.join("data", "train.tsv"), encoding="utf-8", sep="\t")
+    df = pd.read_csv(os.path.join("../data", "train.tsv"), encoding="utf-8", sep="\t")
     # 2- 统计句子长度
     # 2.1- 获得句子列
     sentence_series = df["sentence"]
@@ -36,7 +36,7 @@ def demo01():
 
 def demo02():
     # 1- 读取数据
-    df = pd.read_csv(os.path.join("data", "train.tsv"), encoding="utf-8", sep="\t")
+    df = pd.read_csv(os.path.join("../data", "train.tsv"), encoding="utf-8", sep="\t")
 
     # 2- 统计句子长度
     # 2.1- 获得句子列

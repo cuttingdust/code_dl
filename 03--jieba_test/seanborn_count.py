@@ -5,7 +5,7 @@ import pandas as pd
 from itertools import chain
 
 if __name__ == "__main__":
-    df = pd.read_csv(os.path.join("data", "train.tsv"), encoding="utf-8", sep="\t")
+    df = pd.read_csv(os.path.join("../data", "train.tsv"), encoding="utf-8", sep="\t")
     # print("-" * 50)
     # print(df.head())
 
