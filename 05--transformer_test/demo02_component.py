@@ -1,5 +1,3 @@
-from aiohttp._websocket import mask
-
 from demo01_input import *
 
 import torch
@@ -10,6 +8,7 @@ import math
 import copy
 
 
+@MPoint(append_message="单层注意力")
 def attention(
     query: Tensor, key: Tensor, value: Tensor, mask: Tensor = None, dropout=None
 ):
@@ -22,7 +21,7 @@ def attention(
     :param key: 键张量，形状：[batch_size,seq_len,d_model]
     :param value: 值张量，形状：[batch_size,seq_len,d_model]
     :param dropout: 随机失活Dropout层对象
-    :param mask: 掩码张量，形状：[batch_size,seq_len,seq_len]
+    :param mask: 可广播到注意力分数的掩码张量；1/True表示允许关注，0/False表示屏蔽
     :return: 专属信息包,权重张量。类型是元组
     """
 
@@ -35,8 +34,11 @@ def attention(
 
     # 3- 可选：对相似性得分scores进行掩码处理
     if mask is not None:
-        # 对需要进行掩码的地方，将值替换成-1e9。注意：不要直接设置为0。需要和softmax结合理解。e的-1e9的结果趋近于0，表示权重趋近于0
-        scores = scores.masked_fill(mask == 0, value=-1e9)
+        # 统一转换成布尔掩码并移动到scores所在设备。
+        # True表示允许关注，False表示屏蔽。使用当前数据类型的最小有限值，
+        # 避免float16中直接填充-1e9发生溢出。
+        mask = mask.to(device=scores.device, dtype=torch.bool)
+        scores = scores.masked_fill(~mask, value=torch.finfo(scores.dtype).min)
 
     # 4- 将相似性转成权重
     weight = torch.softmax(scores, dim=-1)
@@ -51,6 +53,7 @@ def attention(
     return C, weight
 
 
+@MPoint(append_message="开始测试使用单层注意力")
 def use_attention():
     # 1- 输入的数据先经过 词嵌入层 和 位置编码
     posi_embed = use_positional_encoding()
@@ -62,7 +65,8 @@ def use_attention():
     # 2.2- 准备掩码【可选】
     # (2,4,4)值的来源于use_positional_encoding的x。每个批次2条句子，每条句子4个词
     # 形状：[batch_size,seq_len,seq_len]
-    mask = torch.triu(torch.ones(size=(2, 4, 4)))
+    # 当前实现约定1表示允许关注，因此因果掩码必须使用下三角矩阵。
+    mask = torch.tril(torch.ones(size=(2, 4, 4), dtype=torch.bool))
 
     # 2.3- 随机失活网络层
     dropout = nn.Dropout(p=0.1)
@@ -83,6 +87,7 @@ def use_attention():
     print(f"解码器C权重：{decoder_attention_weight.shape}-->{decoder_attention_weight}")
 
 
+@MPoint(append_message="")
 def clones(model_obj, nums):
     """
     创建指定个数的相同网络结构对象
@@ -95,7 +100,7 @@ def clones(model_obj, nums):
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, d_model, head, dropout=0.1):
+    def __init__(self, d_model, head, dropout_p=0.1):
         """
         初始化
         :param d_model: 词向量维度/隐藏层隐藏状态向量维度。例如：512
@@ -113,7 +118,7 @@ class MultiHeadAttention(nn.Module):
         self.d_model = d_model
         self.head = head
         self.head_dim = d_model // head  # 每个头分别处理的数据维度。例如：64
-        self.dropout = nn.Dropout(p=dropout)
+        self.dropout = nn.Dropout(p=dropout_p)
 
         # 4- 搭建网络结构
         """
@@ -136,14 +141,24 @@ class MultiHeadAttention(nn.Module):
         :param query: 查询张量，形状：[batch_size每个批次中有多少条句子,seq_len每条句子中有几个词,d_model词向量的维度/隐藏状态维度]
         :param key: 键张量，形状：[batch_size,seq_len,d_model]
         :param value: 值张量，形状：[batch_size,seq_len,d_model]
-        :param mask: 掩码张量，形状：[head,seq_len,seq_len]。注意第一个维度代表的是头数
+        :param mask: 掩码张量，常见形状如下：
+            [seq_len, seq_len]：所有批次、所有头共享一份因果掩码
+            [batch_size, seq_len, seq_len]：每条句子使用独立掩码
+            [batch_size, 1, query_len, key_len]：已经整理好的标准广播形状
         :return:
         """
-        # 1- 掩码处理：进行升维，3维变4维
+        # 1- 将掩码整理成可以广播到[batch_size, head, query_len, key_len]的形状
         if mask is not None:
-            # 例如：[8,4,4] -> [1,8,4,4]
-            # 不管每个批次中有多少条句子，每条句子用的掩码是同一份
-            mask = mask.unsqueeze(0)
+            if mask.dim() == 2:
+                # [query_len,key_len] -> [1,1,query_len,key_len]
+                mask = mask.unsqueeze(0).unsqueeze(0)
+            elif mask.dim() == 3:
+                # [batch_size,query_len,key_len] -> [batch_size,1,query_len,key_len]
+                mask = mask.unsqueeze(1)
+            elif mask.dim() != 4:
+                raise ValueError(
+                    f"mask应为2维、3维或4维张量，当前形状为{tuple(mask.shape)}"
+                )
 
         # 2- 获得batch_size，也就是批次中句子的条数
         batch_size = query.shape[0]
@@ -189,6 +204,7 @@ class MultiHeadAttention(nn.Module):
 
 
 # 测试多头注意力计算
+@MPoint(append_message="开始测试多头注意力")
 def use_multi_head_attention():
     # 1- 获取位置编码之后的词数据
     position_data = use_positional_encoding()
@@ -197,8 +213,9 @@ def use_multi_head_attention():
     query = key = value = position_data
 
     # 3- 创建多头注意力实例对象
-    mask = torch.triu(torch.ones(size=(8, 4, 4)))
-    my_attention = MultiHeadAttention(d_model=512, head=8, dropout=0.1)
+    # 一份二维下三角因果掩码会自动广播到所有批次和所有注意力头。
+    mask = torch.tril(torch.ones(size=(4, 4), dtype=torch.bool))
+    my_attention = MultiHeadAttention(d_model=512, head=8, dropout_p=0.1)
 
     # 4- 调用前向传播
     result = my_attention(query, key, value, mask=mask)
@@ -208,7 +225,178 @@ def use_multi_head_attention():
     return result
 
 
+# 层归一化/规范化层：随着网络模型训练，数据有可能出现极值，导致梯度爆炸或消失，为了让模型训练稳定，通过标准化处理，让数据变的正常
+# 也就是要实现y=kx+b，其中x要经过标准化处理（要计算数据的均值mean和标准差std）
+class LayerNorm(nn.Module):
+    def __init__(self, d_model):
+        # 1- 初始化父类
+        super().__init__()
+
+        # 2- 线性公式中参数的定义
+        """
+           为什么k和b要通过nn.Parameter进行定义？
+           答：因为nn.Parameter会自动将k和b注册到神经网络模型中，作为可训练的参数。通过反向传播得到k和b。
+               如果不写nn.Parameter，那么k和b的值永远固定，不会发生变化。
+               对应前面神经网络模型代码中如下两行代码
+               optimizer = optim.Adam(params=model.parameters())
+               optimizer.step()
+       """
+        # 2.1- 定义k
+        self.k = nn.Parameter(torch.ones(d_model))
+
+        # 2.2- 定义b
+        self.b = nn.Parameter(torch.zeros(d_model))
+
+        # 3- 定义小常数：防止分母为0
+        self.eps = 1e-6
+
+    def forward(self, data):
+        """
+        前向传播：输入前面子层处理后的数据，经过层归一化进行【标准化处理】，让模型训练稳定
+        要实现y=kx+b，其中x要经过标准化处理（要计算数据的均值mean和标准差std）
+        :param data: 前面子层处理后的数据。形状[batch_size,seq_len,d_model]
+        :return:
+        """
+        # 1- 计算均值
+        """
+            参数解释：
+                dim=-1：对最后一个维度计算均值
+                keepdim=True：表示计算后，张量的形状保留。举例：[2,4,512]->[2,4,1]
+        """
+        mean = data.mean(dim=-1, keepdim=True)
+
+        # 2- 计算总体方差。LayerNorm使用correction=0，而不是样本方差。
+        variance = data.var(dim=-1, keepdim=True, correction=0)
+
+        # 3- 先标准化，再使用可训练参数k、b进行缩放和平移
+        normalized_data = (data - mean) / torch.sqrt(variance + self.eps)
+        return self.k * normalized_data + self.b
+
+
+# 子层连接类
+class SubLayerConnection(nn.Module):
+    def __init__(self, d_model, dropout_p):
+        # 1- 初始化父类
+        super().__init__()
+
+        # 2- 创建层归一化
+        """
+           为什么把LayerNorm创建在__init__中？
+           答：因为每个子层的后面都有该层
+       """
+        self.layer_norm = LayerNorm(d_model)
+
+        # 3- 创建随机失活层
+        self.dropout = nn.Dropout(p=dropout_p)
+
+    def forward(self, data, sublayer_obj):
+        """
+        前向传播：使用你指定的具体子层实例对象【sublayer_obj】对数据【data】进行指定的处理
+        :param data: 输入到层中的数据
+        :param sublayer_obj: 具体子层实例对象。例如：多头自注意力实例对象、前馈网络实例对象、掩码多头自注意力实例对象、多头注意力实例对象（交叉注意力）
+        :return:
+        """
+
+        # 具体子层实例对象【sublayer_obj】对数据【data】进行指定的处理
+        # 写法一：原始Transformer的实现
+        # 子层处理(也就是调用forward) -> 随机失活层 -> 残差连接 -> 层归一化
+        # result = self.layer_norm(self.dropout(sublayer_obj(data)) + data)
+
+        # 写法二：目前主流大模型的实现 为数据呈现高斯分布 减缓梯度爆炸或者消失
+        # 层归一化 -> 子层处理(也就是调用forward) -> 随机失活层 -> 残差连接
+        """
+            第一步：层归一化        self.layer_norm(data)
+            第二步：子层处理        sublayer_obj(self.layer_norm(data))
+            第三步：随机失活层       self.dropout(sublayer_obj(self.layer_norm(data)))
+            第四步：残差连接        + data
+        """
+        result = self.dropout(sublayer_obj(self.layer_norm(data))) + data
+
+        return result
+
+
+# 子层连接测试
+@MPoint(append_message="测试子链接层")
+def use_SubLayerConnection():
+    # 1- 准备数据：词嵌入层+位置编码
+    data = use_positional_encoding()
+    d_model = 512
+
+    # 2- 子层连接类的实例对象
+    SubLayerConnection_obj = SubLayerConnection(d_model, dropout_p=0.1)
+
+    # 3- 演示子层的组合
+    # 3.1- 多头自注意力层 + 残差连接和层归一化
+    # 3.1.1- 创建 多头自注意力层 数据处理规则
+    # 定义方式一：函数的形式
+    @MPoint(append_message="子层链接的测试")
+    def data_handler_fn(data):
+        # 创建 多头自注意力层 类的实例对象
+        attention_obj = MultiHeadAttention(d_model=d_model, head=8, dropout_p=0.1)
+
+        # 调用forward
+        return attention_obj(
+            query=data,
+            key=data,
+            value=data,
+        )
+
+    # 3.1.2- 组装得到子层：也就是调用SubLayerConnection它的forward
+    multi_head_attention_output = SubLayerConnection_obj(data, data_handler_fn)
+    print(f"多头自注意力层输出结果形状：{multi_head_attention_output.shape}")
+
+    # 3.2- 前馈网络层 + 残差连接和层归一化
+    # 定义方式二：lambda的形式
+    feed_forward_output = SubLayerConnection_obj(
+        multi_head_attention_output,
+        lambda data: FeedForward(d_model=d_model, output_dim=1024, dropout_p=0.1)(data),
+    )
+    print(f"前馈网络层输出结果形状：{feed_forward_output.shape}")
+
+
+#################################################################################################
+
+
+# 前馈网络/前馈全连接层：通过调整张量大小，实现强化信息的过程
+class FeedForward(nn.Module):
+    def __init__(self, d_model, output_dim, dropout_p=0.1):
+        # 1- 初始化父类
+        super().__init__()
+
+        # 2- 搭建网络结构
+        # 2.1- 第一个线性层：用来对输入的词向量维度进行放大，例如：512->1024
+        self.linear_1 = nn.Linear(in_features=d_model, out_features=output_dim)
+
+        # 2.2- ReLU为前馈网络引入非线性；没有激活函数时，两个线性层仍可合并成一个线性层。
+        self.relu = nn.ReLU()
+
+        # 2.3- 随机失活层
+        self.dropout = nn.Dropout(p=dropout_p)
+
+        # 2.3- 第二个线性层：用来对上一个线性层输出的结果进行浓缩，例如：1024->512
+        self.linear_2 = nn.Linear(in_features=output_dim, out_features=d_model)
+
+    def forward(self, data):
+        # 1- 调用第一个线性层
+        data = self.linear_1(data)
+
+        # 2- 通过ReLU引入非线性。经典Transformer论文的前馈网络使用ReLU。
+        data = self.relu(data)
+
+        # 3- 调用随机失活，缓解过拟合
+        data = self.dropout(data)
+
+        # 4- 调用第二个线性层
+        data = self.linear_2(data)
+
+        return data
+
+
+##################################################################################################
+
 if __name__ == "__main__":
     # use_attention()
 
-    use_multi_head_attention()
+    # use_multi_head_attention()
+
+    use_SubLayerConnection()
