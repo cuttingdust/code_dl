@@ -110,7 +110,7 @@ class Embedding(nn.Module):
         self.embed = nn.Embedding(num_embeddings=vocab_size, embedding_dim=d_model)
 
         # 4- 初始化词嵌入权重
-        # nn.Embedding默认初始化的标准差接近1，后面再乘sqrt(d_model)会让数值过大，
+        # 修改原因：nn.Embedding默认初始化的标准差接近1，后面再乘sqrt(d_model)会让数值过大，
         # 从而淹没数值范围只有[-1, 1]的位置编码。
         # 这里先把标准差缩小到1/sqrt(d_model)，经过forward中的缩放后约为1。
         nn.init.normal_(self.embed.weight, mean=0.0, std=d_model**-0.5)
@@ -183,13 +183,16 @@ class PositionalEncoding(nn.Module):
 
         # 7- 调用sin、cos分别计算位置编码值
         pe[:, 0::2] = torch.sin(position_value)
-        # 当d_model是奇数时，奇数列的数量会比偶数列少1，因此需要按实际列数截取。
+        # 修改原因：当d_model是奇数时，奇数列的数量会比偶数列少1；
+        # 如果不按实际列数截取，给cos位置编码赋值时会发生张量形状不一致。
         pe[:, 1::2] = torch.cos(position_value[:, : pe[:, 1::2].shape[1]])
 
         # 8- 调整pe的形状变成3维，也就是[60,d_model]->[1,60,d_model]每个批次1条句子，每个句子最多60个词，词向量是d_model
         pe = pe.unsqueeze(0)
 
-        # 9- 将固定位置编码注册为buffer。它不会参与梯度更新，但会：
+        # 9- 将固定位置编码注册为buffer。
+        # 修改原因：位置编码是固定公式生成的数据，不应该被优化器当作权重训练；
+        # 但它仍然需要跟随模型移动设备并保存，所以不能只是普通成员变量。它会：
         #    1. 跟随模型在CPU和GPU之间移动；
         #    2. 保存到state_dict中；
         #    3. 可以通过self.pe访问。
@@ -208,6 +211,8 @@ class PositionalEncoding(nn.Module):
             如果句子长度超过max_len，位置编码和词向量无法按位置相加，因此应明确报错，
             而不是悄悄丢弃后面的词。
         """
+        # 修改原因：原代码在句子长度超过max_len时，会在张量相加处抛出难懂的尺寸错误；
+        # 这里提前检查并告诉使用者应该增大max_len。
         if embed.shape[1] > self.pe.shape[1]:
             raise ValueError(
                 f"输入句子长度{embed.shape[1]}超过位置编码支持的最大长度"
@@ -254,7 +259,8 @@ def use_positional_encoding():
 # 可视化位置编码
 def plot_position():
     # 1. 实例化位置编码器.
-    # 可视化时关闭Dropout，避免随机置0破坏正弦/余弦曲线。
+    # 修改原因：可视化的目标是观察固定的位置编码曲线；如果保持训练模式的Dropout，
+    # 部分位置编码会被随机置0，每次画出的曲线也可能不同，因此这里关闭Dropout。
     my_position = PositionalEncoding(d_model=20, dropout_p=0.0, max_len=100)
     my_position.eval()
 

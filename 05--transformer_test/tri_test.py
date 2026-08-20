@@ -95,7 +95,8 @@ def assert_demo(d_model, head):
 
 
 def mask():
-    # 一条长度为4的目标句子使用下三角因果掩码。
+    # 修改原因：原来的全1掩码没有真正屏蔽任何位置，无法演示masked_fill的作用；
+    # 这里改成一条长度为4的目标句子使用的下三角因果掩码。
     # [4,4] -> [1,1,4,4]，随后广播到2个批次、2个注意力头。
     causal_mask = torch.tril(torch.ones(size=(4, 4), dtype=torch.bool))
     causal_mask = causal_mask.unsqueeze(0).unsqueeze(0)

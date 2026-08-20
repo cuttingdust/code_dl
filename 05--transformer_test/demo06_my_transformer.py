@@ -62,12 +62,16 @@ class MyTransformer(nn.Module):
         encoder_data = self.en_embed_pos(en_input)
 
         # 2- 编码器
+        # 修改原因：src_mask用于屏蔽源句中的PAD；如果不向编码器传递，
+        # 编码器自注意力会把PAD位置也当作正常单词参与计算。
         encoder_data = self.encoder(encoder_data, src_mask)
 
         # 3- 解码器端_输入部分：词嵌入层、位置编码
         decoder_data = self.de_embed_pos(de_input)
 
         # 4- 解码器
+        # 修改原因：解码器既需要mask防止偷看目标端未来词，也需要src_mask在交叉注意力中
+        # 屏蔽源端PAD，所以两份mask都要继续传给Decoder。
         decoder_data = self.decoder(
             data=decoder_data,
             mask=mask,
@@ -155,7 +159,9 @@ def get_my_transformer():
         output=output,
     )
 
-    # 对二维及以上参数统一执行Xavier初始化。
+    # 修改原因：clones使用deepcopy后，各层不仅结构相同，初始参数值也完全相同；
+    # 同时Embedding和多个Linear需要合适的初始数值范围，才能让训练更加稳定。
+    # 因此对二维及以上参数统一执行Xavier初始化。
     # 这样不仅能控制Embedding和线性层的初始数值范围，也能让deepcopy得到的各层
     # 从不同随机参数开始训练；LayerNorm的一维k、b仍保持1和0。
     for parameter in my_transformer.parameters():
@@ -177,14 +183,20 @@ def use_my_transformer():
     en_input = torch.tensor([[1, 2, 3, 4], [5, 6, 7, 8]])
 
     # 2.2- 输入到解码器端的数据必须是目标句子右移后的结果。
+    # 修改原因：训练时如果把未右移的完整目标句直接输入，当前位置就已经包含正确答案；
+    # 因果mask只能屏蔽未来位置，无法屏蔽当前位置本身，因此必须先右移。
     # 这里假设0是BOS：训练时输入[BOS,词1,词2,词3]，标签则是[词1,词2,词3,EOS]。
     de_input = torch.tensor([[0, 223, 2344, 456], [0, 2456, 131, 456]])
 
     # 2.3- 解码器的掩码
+    # 修改原因：本项目约定True表示允许关注，因此必须使用下三角矩阵；
+    # 这样第t个位置只能看到0~t位置，不能看到t后面的未来词。
     seq_len = de_input.shape[1]
     mask = torch.tril(torch.ones(size=(seq_len, seq_len), dtype=torch.bool))
 
     # 3- 调用Transformer框架
+    # 修改原因：训练时把logits直接交给CrossEntropyLoss；只有在展示或预测时才转成概率，
+    # 避免在模型和损失函数中重复执行Softmax。
     logits = my_transformer(en_input, de_input, mask)
     probabilities = my_transformer.output.probabilities(logits)
 

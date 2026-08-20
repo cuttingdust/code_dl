@@ -34,7 +34,9 @@ def attention(
 
     # 3- 可选：对相似性得分scores进行掩码处理
     if mask is not None:
-        # 统一转换成布尔掩码并移动到scores所在设备。
+        # 修改原因：mask可能是0/1浮点张量，也可能仍在CPU，而scores可能已经在GPU；
+        # 不统一类型和设备会出现判断含义不清或CPU/CUDA设备不一致错误。
+        # 因此统一转换成布尔掩码并移动到scores所在设备。
         # True表示允许关注，False表示屏蔽。使用当前数据类型的最小有限值，
         # 避免float16中直接填充-1e9发生溢出。
         mask = mask.to(device=scores.device, dtype=torch.bool)
@@ -65,7 +67,8 @@ def use_attention():
     # 2.2- 准备掩码【可选】
     # (2,4,4)值的来源于use_positional_encoding的x。每个批次2条句子，每条句子4个词
     # 形状：[batch_size,seq_len,seq_len]
-    # 当前实现约定1表示允许关注，因此因果掩码必须使用下三角矩阵。
+    # 修改原因：attention中使用mask==0的位置进行屏蔽，因此本项目约定1表示允许关注；
+    # 在这个约定下，因果掩码必须使用下三角矩阵，才能允许看当前位置和过去、禁止看未来。
     mask = torch.tril(torch.ones(size=(2, 4, 4), dtype=torch.bool))
 
     # 2.3- 随机失活网络层
@@ -148,6 +151,9 @@ class MultiHeadAttention(nn.Module):
         :return:
         """
         # 1- 将掩码整理成可以广播到[batch_size, head, query_len, key_len]的形状
+        # 修改原因：原实现要求调用者为每个注意力头复制一份[head,seq,seq]掩码，
+        # 不方便合并每条句子各自的PAD掩码；改成标准广播形状后，一份二维因果掩码
+        # 就可以供所有批次和所有注意力头共享。
         if mask is not None:
             if mask.dim() == 2:
                 # [query_len,key_len] -> [1,1,query_len,key_len]
@@ -213,6 +219,7 @@ def use_multi_head_attention():
     query = key = value = position_data
 
     # 3- 创建多头注意力实例对象
+    # 修改原因：所有头使用相同的因果规则，没有必要手工创建8份掩码；
     # 一份二维下三角因果掩码会自动广播到所有批次和所有注意力头。
     mask = torch.tril(torch.ones(size=(4, 4), dtype=torch.bool))
     my_attention = MultiHeadAttention(d_model=512, head=8, dropout_p=0.1)
@@ -245,6 +252,8 @@ class LayerNorm(nn.Module):
         self.k = nn.Parameter(torch.ones(d_model))
 
         # 2.2- 定义b
+        # 修改原因：标准LayerNorm初始化时缩放参数k为1、偏置b为0；
+        # 原来把b初始化为1会让归一化结果整体向上平移1。
         self.b = nn.Parameter(torch.zeros(d_model))
 
         # 3- 定义小常数：防止分母为0
@@ -265,7 +274,9 @@ class LayerNorm(nn.Module):
         """
         mean = data.mean(dim=-1, keepdim=True)
 
-        # 2- 计算总体方差。LayerNorm使用correction=0，而不是样本方差。
+        # 2- 计算总体方差。
+        # 修改原因：LayerNorm统计的是当前词向量各维度的总体方差，应使用correction=0；
+        # 原来的torch.std默认使用样本修正，在维度很小时甚至可能产生NaN。
         variance = data.var(dim=-1, keepdim=True, correction=0)
 
         # 3- 先标准化，再使用可训练参数k、b进行缩放和平移
@@ -302,7 +313,8 @@ class SubLayerConnection(nn.Module):
         # 子层处理(也就是调用forward) -> 随机失活层 -> 残差连接 -> 层归一化
         # result = self.layer_norm(self.dropout(sublayer_obj(data)) + data)
 
-        # 写法二：目前主流大模型的实现 为数据呈现高斯分布 减缓梯度爆炸或者消失
+        # 写法二：Pre-LN结构。先统一数值尺度再进入子层，有助于深层网络稳定传播梯度。
+        # 注意：LayerNorm只规范均值和方差，并不保证数据变成高斯分布。
         # 层归一化 -> 子层处理(也就是调用forward) -> 随机失活层 -> 残差连接
         """
             第一步：层归一化        self.layer_norm(data)
@@ -367,20 +379,24 @@ class FeedForward(nn.Module):
         # 2.1- 第一个线性层：用来对输入的词向量维度进行放大，例如：512->1024
         self.linear_1 = nn.Linear(in_features=d_model, out_features=output_dim)
 
-        # 2.2- ReLU为前馈网络引入非线性；没有激活函数时，两个线性层仍可合并成一个线性层。
+        # 2.2- 创建ReLU激活函数
+        # 修改原因：原代码只有Linear -> Dropout -> Linear；推理时Dropout关闭，
+        # 两个线性层可以合并成一个线性层，前馈网络无法学习复杂的非线性特征。
         self.relu = nn.ReLU()
 
         # 2.3- 随机失活层
         self.dropout = nn.Dropout(p=dropout_p)
 
-        # 2.3- 第二个线性层：用来对上一个线性层输出的结果进行浓缩，例如：1024->512
+        # 2.4- 第二个线性层：用来对上一个线性层输出的结果进行浓缩，例如：1024->512
         self.linear_2 = nn.Linear(in_features=output_dim, out_features=d_model)
 
     def forward(self, data):
         # 1- 调用第一个线性层
         data = self.linear_1(data)
 
-        # 2- 通过ReLU引入非线性。经典Transformer论文的前馈网络使用ReLU。
+        # 2- 通过ReLU引入非线性。
+        # 修改原因：经典Transformer前馈网络必须在线性层之间加入非线性激活；
+        # Dropout负责正则化，不能替代ReLU的非线性表达能力。
         data = self.relu(data)
 
         # 3- 调用随机失活，缓解过拟合

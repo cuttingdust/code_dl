@@ -38,6 +38,9 @@ class EncoderLayer(nn.Module):
         self.feed_forward_layer = SubLayerConnection(self.d_model, self.dropout_p)
 
     def forward(self, data, mask=None):
+        # 修改原因：真实批次中的句子通常会补PAD；如果编码器没有mask，
+        # 正常单词也会关注PAD并把无效信息带入后续层。没有PAD时mask可以传None。
+
         # 1- 数据经过第一个层的处理：多头自注意力子层
         multi_output = self.multi_layer(
             data,
@@ -69,14 +72,15 @@ class Encoder(nn.Module):
 
         # 3- 层归一化
         """
-            当前子层连接采用Pre-LN结构，因此堆叠N层后保留最终LayerNorm，
-            对整个编码器输出进行统一归一化。
+            修改原因：当前子层连接采用Pre-LN结构，每个子层只在进入计算前归一化；
+            因此堆叠N层后保留最终LayerNorm，对整个编码器输出进行统一归一化。
         """
         self.layer_norm = LayerNorm(encoder_layer.d_model)
 
     def forward(self, data, mask=None):
         """
         注意：for循环中两个data需要与传递给forward的参数名称完全一致，否则6层网络处理的数据就会断开。
+        修改原因：同一份源端PAD掩码必须传给每一个编码器层，否则后面的层仍然会关注PAD。
         mask用于屏蔽编码器输入中的PAD位置；没有PAD时可以传None。
         """
         for encoder_layer in self.encoder_layer_list:

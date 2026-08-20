@@ -51,6 +51,9 @@ class DecoderLayer(nn.Module):
         self.feed_forward_layer = SubLayerConnection(self.d_model, self.dropout_p)
 
     def forward(self, data, mask, encoder_output, encoder_mask=None):
+        # 参数说明：mask负责屏蔽目标端未来词；encoder_mask负责屏蔽源端PAD。
+        # 修改原因：这两种mask作用在不同的注意力层，不能混成同一个参数。
+
         # 1- 数据经过第一个层的处理：掩码多头自注意力子层
         data = self.mask_multi_self_layer(
             data,
@@ -60,6 +63,8 @@ class DecoderLayer(nn.Module):
         )
 
         # 2- 数据经过第二个层的处理：多头注意力子层
+        # 修改原因：交叉注意力的K、V来自编码器；如果源句含PAD，必须使用encoder_mask，
+        # 否则解码器会把PAD对应的编码器输出也当成有效翻译信息。
         data = self.multi_layer(
             data,
             lambda x: self.multi_head_attn(
@@ -92,14 +97,16 @@ class Decoder(nn.Module):
 
         # 3- 层归一化
         """
-            当前子层连接采用Pre-LN结构，因此堆叠N层后保留最终LayerNorm，
-            对整个解码器输出进行统一归一化。
+            修改原因：当前子层连接采用Pre-LN结构，每个子层只在进入计算前归一化；
+            因此堆叠N层后保留最终LayerNorm，对整个解码器输出进行统一归一化。
         """
         self.layer_norm = LayerNorm(decoder_layer.d_model)
 
     def forward(self, data, mask, encoder_output, encoder_mask=None):
         """
-        注意：for循环中两个data需要与传递给forward的参数名称完全一致，否则6层网络处理的数据就会断开
+        注意：for循环中两个data需要与传递给forward的参数名称完全一致，否则6层网络处理的数据就会断开。
+        修改原因：目标端mask和源端encoder_mask都必须传给每一层解码器，
+        否则后续层会重新看到未来词或源端PAD。
         """
 
         for decoder_layer in self.decoder_layer_list:
@@ -159,8 +166,9 @@ def use_decoder():
 
     # 4- 处理数据
     # 4.1- 准备掩码
-    # 当前注意力实现约定1/True表示允许关注，因此使用下三角因果掩码。
-    # 二维掩码会在MultiHeadAttention中自动广播到所有批次和所有头。
+    # 修改原因：原来的全零mask会把所有位置全部屏蔽；而使用上三角允许矩阵又会偷看未来。
+    # 当前注意力实现约定1/True表示允许关注，因此使用下三角因果掩码，
+    # 让当前位置只能看到自己和过去。二维掩码会自动广播到所有批次和所有头。
     seq_len = y.shape[1]
     mask = torch.tril(torch.ones(size=(seq_len, seq_len), dtype=torch.bool))
 
