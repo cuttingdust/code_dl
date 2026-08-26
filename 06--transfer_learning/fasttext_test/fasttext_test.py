@@ -75,3 +75,42 @@ def demo05():
     # 模型评估
     result = model.test(path="data/cooking.pre.valid")
     print(result)
+
+
+def demo06():
+    # 训练模型
+    # hs：层次softmax
+    model = fasttext.train_supervised(
+        input="data/cooking.pre.train", epoch=20, lr=1, wordNgrams=2, loss="hs"
+    )
+
+    # 模型评估
+    result = model.test(path="data/cooking.pre.valid")
+    print(result)
+
+
+def demo07():
+    # 训练模型
+    # hs：层次softmax
+    model = fasttext.train_supervised(
+        input="data/cooking.pre.train",
+        autotuneDuration=60 * 2,
+        autotuneValidationFile="data/cooking.pre.valid",
+    )
+
+    # 模型评估
+    result = model.test(path="data/cooking.pre.valid")
+    print(result)
+
+
+# 将 多标签多分类 问题简化成 单标签多分类的问题。每种分类单独进行训练
+def demo08():
+    # 训练模型
+    # ova：多标签多分类 问题简化成 单标签多分类的问题
+    model = fasttext.train_supervised(
+        input="data/cooking.pre.train", epoch=20, lr=0.1, wordNgrams=2, loss="ova"
+    )
+
+    # 模型评估
+    result = model.test(path="data/cooking.pre.valid")
+    print(result)
