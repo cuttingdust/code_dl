@@ -1,6 +1,9 @@
 # pip install fasttext-wheel
 import fasttext
 
+from pathlib import Path
+
+
 def demo01():
     # 1- 模型训练
     model = fasttext.train_supervised(input=r"data/cooking_train.txt")
@@ -114,3 +117,65 @@ def demo08():
     # 模型评估
     result = model.test(path="data/cooking.pre.valid")
     print(result)
+
+
+def demo09():
+    # 训练模型
+    # ova：多标签多分类 问题简化成 单标签多分类的问题
+    model = fasttext.train_supervised(
+        input="data/cooking.pre.train", epoch=20, lr=0.1, wordNgrams=2, loss="ova"
+    )
+
+    model_path = Path("model")
+    model_path.mkdir(parents=True, exist_ok=True)
+
+    # 保存训练好的模型
+    model.save_model("model/fasttext.pkl")
+
+    # 加载训练好的模型
+    model = fasttext.load_model("model/fasttext.pkl")
+    pred_labels = model.predict(
+        text=["how to seperate peanut oil from roasted peanuts at home?"], k=5
+    )
+    print(pred_labels)
+
+
+if __name__ == "__main__":
+    print("")
+    # 1- 模型训练、预测、评估
+    # print("-" * 40)
+    # demo01()  # (3000, 0.13733333333333334, 0.05939166786795445)
+    #
+    # # 2- 数据基本处理
+    # print("-" * 40)
+    # demo02()  # (3000, 0.167, 0.07222142136370188)
+    #
+    # # 3- 增加训练轮次
+    # print("-" * 40)
+    # demo03()  # (3000, 0.48966666666666664, 0.21176300994666283)
+    #
+    # # 4- 调整学习率
+    # print("-" * 40)
+    # demo04()  # (3000, 0.5896666666666667, 0.25500937004468793)
+    #
+    # # 5- 设置N-gram参数
+    # print("-" * 40)
+    # demo05()  # (3000, 0.5986666666666667, 0.25890154245351016)
+    #
+    # # 6- 调整损失函数：主要是提升了运行速度
+    # print("-" * 40)
+    # demo06()
+    #
+    # # 7- 自动超参数调优
+    # print("-" * 40)
+    # demo07()
+    #
+    # # 8- 多标签多分类问题
+    # print("-" * 40)
+    # demo08()
+
+    # 9- 保存模型和重新加载模型
+    print("-" * 40)
+    demo09()
+
+    print("#" * 50)
