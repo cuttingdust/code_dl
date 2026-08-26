@@ -55,9 +55,12 @@ seq2seq_encoder_structure.png
 *.onnx
 *.pt
 *.pth
-model/*.pkl
+**/model/
+PretrainedModel/
 
 # Operating-system files
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+
