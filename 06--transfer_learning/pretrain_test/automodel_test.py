@@ -9,6 +9,7 @@ from transformers import AutoModelForSequenceClassification  # 序列分类
 from transformers import AutoModel  # 通用模型加载类
 from transformers import AutoModelForMaskedLM  # 完型填空类
 from transformers import AutoModelForQuestionAnswering  # 阅读理解类
+from transformers import AutoModelForSeq2SeqLM  # 文本生成：文本摘要
 
 
 def text_classification():
@@ -203,6 +204,63 @@ def q_and_a():
         print(f"问题是：{question}，对应的答案：{answer}")
 
 
+def summary():
+    # 1- 创建模型对象
+    model_path = r"PretrainedModel/distilbart-cnn-12-6"
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_path)
+
+    # 2- 准备数据
+    text = (
+        "BERT is a transformers model pretrained on a large corpus of English data "
+        "in a self-supervised fashion. This means it was pretrained on the raw texts "
+        "only, with no humans labelling them in any way (which is why it can use lots "
+        "of publicly available data) with an automatic process to generate inputs and "
+        "labels from those texts. More precisely, it was pretrained with two objectives:Masked "
+        "language modeling (MLM): taking a sentence, the model randomly masks 15% of the "
+        "words in the input then run the entire masked sentence through the model and has "
+        "to predict the masked words. This is different from traditional recurrent neural "
+        "networks (RNNs) that usually see the words one after the other, or from autoregressive "
+        "models like GPT which internally mask the future tokens. It allows the model to learn "
+        "a bidirectional representation of the sentence.Next sentence prediction (NSP): the models"
+        " concatenates two masked sentences as inputs during pretraining. Sometimes they correspond to "
+        "sentences that were next to each other in the original text, sometimes not. The model then "
+        "has to predict if the two sentences were following each other or not."
+    )
+
+    # 3- 处理数据
+    data_tensor = tokenizer(text=text, return_tensors="pt")
+
+    # 4- 得到文本摘要：生成文本内容
+    model.eval()
+    result = model.generate(**data_tensor)
+    print(result)  # 就是一个普通张量
+
+    # 5- 结果解析
+    # 5.1- 使用decode进行解码
+    decode_result_1 = [
+        tokenizer.decode(
+            word_index, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )
+        for word_index in result[0]
+    ]
+    print(f"decode处理后的结果：{' '.join(decode_result_1)}")
+
+    decode_result_2 = [
+        tokenizer.decode(
+            word_index, skip_special_tokens=False, clean_up_tokenization_spaces=False
+        )
+        for word_index in result[0]
+    ]
+    print(f"decode处理后的结果：{' '.join(decode_result_2)}")
+
+    # 5.2- 直接使用convert_ids_to_tokens
+    print(
+        "convert_ids_to_tokens处理后的结果：",
+        " ".join(tokenizer.convert_ids_to_tokens(result[0], skip_special_tokens=True)),
+    )
+
+
 if __name__ == "__main__":
     print("")
 
@@ -216,4 +274,7 @@ if __name__ == "__main__":
     # fill_blank()
 
     # 4- 阅读理解
-    q_and_a()
+    # q_and_a()
+
+    # 5- 文本摘要
+    summary()
