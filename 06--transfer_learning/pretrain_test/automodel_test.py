@@ -7,6 +7,8 @@ import torch
 from transformers import AutoTokenizer  # 分词器
 from transformers import AutoModelForSequenceClassification  # 序列分类
 from transformers import AutoModel  # 通用模型加载类
+from transformers import AutoModelForMaskedLM  # 完型填空类
+from transformers import AutoModelForQuestionAnswering  # 阅读理解类
 
 
 def text_classification():
@@ -125,6 +127,82 @@ def text_feature_extraction():
     print(output.last_hidden_state)
 
 
+def fill_blank():
+    # 1- 创建模型对象
+    model_path = r"PretrainedModel/chinese-bert-wwm"
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    model = AutoModelForMaskedLM.from_pretrained(model_path)
+
+    # 2- 准备数据
+    content = "我想明天去[MASK]家吃饭."
+
+    # 3- 处理数据
+    # 推荐：完型填空类的任务，不要设置padding、truncation此类的参数
+    data_tensor = tokenizer(text=content, return_tensors="pt")
+
+    # 4- 调用
+    model.eval()
+    result = model(**data_tensor)
+
+    print(f"result-->类型：{type(result)}")
+    print(f"result-->内容：{result}")
+
+    """
+           结果形状是[1, 12, 21128]，解释如下：
+               1- 1：上面传递给大模型的有1条句子
+               2- 12：上面传递给大模型的句子中，含句子开头、句子结尾、标点符号、[MASK]在内，总共有12个词
+               3- 21128：chinese-bert-wwm大模型的词汇表中有这么多个词
+
+           这里写[0][6]原因是，[MASK]所在的索引是6
+       """
+    print(f"result中logits-->形状：{result.logits.shape}")
+    print(f"result中logits某个词-->形状：{result.logits[0][6].shape}")
+    print(f"result中logits某个词-->结果数据：{result.logits[0][6]}")
+
+    # 获得概率最高词的索引信息
+    pred_word_index = torch.argmax(result.logits[0][6]).item()
+    # 将概率最高词的索引转成能够识别的内容
+    pred_word_content = tokenizer.convert_ids_to_tokens(pred_word_index)
+
+    print(
+        f"填充词的索引：{pred_word_index}，对应的内容：{pred_word_content}"
+    )  # 填充词的索引：1961，对应的内容：她
+
+
+def q_and_a():
+    # 1- 创建模型实例对象
+    model_path = r"PretrainedModel/chinese_pretrain_mrc_roberta_wwm_ext_large"
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    model = AutoModelForQuestionAnswering.from_pretrained(model_path)
+
+    # 2- 准备数据
+    # context的内容中，如果有空格，它会自动的过滤掉
+    context = "我叫张三 我是一个程序员 我的喜好是打篮球"
+    questions = ["我是谁？", "我是做什么的？", "我的爱好是什么？"]
+    # questions = ['我是谁？', '我是做什么的？', '我的爱好是什么？','我爸姓啥？']
+
+    # 3- 对问题列表进行循环。每次让大模型回答一个问题。这是与pipeline的主要区别
+    for question in questions:
+        # 3.1- 数据处理
+        data_tensor = tokenizer(question, context, return_tensors="pt")
+        print(data_tensor)
+        # 3.2- 调用模型
+        model.eval()
+        result = model(**data_tensor)
+        # print(result)
+
+        # 3.3- 处理结果
+        # 获得答案中预测概率最高start开始索引
+        start_index = torch.argmax(result.start_logits).item()
+        end_index = torch.argmax(result.end_logits).item() + 1
+        # 通过start和end，对context（因为问题的答案肯定存在于上下文中）上下文进行切片，得到答案
+        answer = tokenizer.convert_ids_to_tokens(
+            data_tensor.input_ids[0][start_index:end_index]
+        )
+
+        print(f"问题是：{question}，对应的答案：{answer}")
+
+
 if __name__ == "__main__":
     print("")
 
@@ -132,4 +210,10 @@ if __name__ == "__main__":
     # text_classification()
 
     # 2- 文本特征提取
-    text_feature_extraction()
+    # text_feature_extraction()
+
+    # 3- 完型填空
+    # fill_blank()
+
+    # 4- 阅读理解
+    q_and_a()
