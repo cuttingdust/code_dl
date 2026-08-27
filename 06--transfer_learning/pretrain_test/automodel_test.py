@@ -10,6 +10,8 @@ from transformers import AutoModel  # 通用模型加载类
 from transformers import AutoModelForMaskedLM  # 完型填空类
 from transformers import AutoModelForQuestionAnswering  # 阅读理解类
 from transformers import AutoModelForSeq2SeqLM  # 文本生成：文本摘要
+from transformers import AutoModelForTokenClassification  # NER类
+from transformers import AutoConfig  # 加载模型配置文件
 
 
 def text_classification():
@@ -261,6 +263,49 @@ def summary():
     )
 
 
+def ner():
+    # 1- 创建模型实例对象
+    model_path = r"PretrainedModel/roberta-base-finetuned-cluener2020-chinese"
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    model = AutoModelForTokenClassification.from_pretrained(model_path)
+    config = AutoConfig.from_pretrained(model_path)
+
+    # 2- 准备数据
+    content = "鲁迅原名周树人，代表作有《朝花夕拾》，在外交部上班，今天他去故宫游览"
+
+    # 3- 数据处理
+    data_tensor = tokenizer(text=content, return_tensors="pt")
+
+    # 4- 调用
+    model.eval()
+    result = model(**data_tensor)
+    print(result)
+    """
+        [1, 34, 32]形状解释
+            1- 1：上面有1条句子
+            2- 34：上面句子中，含开头、结尾、标点符号在内有34个词
+            3- 32：该模型支持的命名实体的种类有32。每种大模型支持的命名实体的种类不同
+    """
+    # print(result.logits.shape)  # 形状[1, 34, 32]
+
+    # 5- 结果解析
+    words = tokenizer.convert_ids_to_tokens(data_tensor.input_ids[0])
+
+    for word, prob_list in zip(words, result.logits[0]):
+        # 过滤掉特殊符号：例如句子的开始、结束
+        if word in tokenizer.all_special_tokens:
+            continue
+
+        # 1- 获得每个词对应的命名实体类别索引
+        ner_index = torch.argmax(prob_list).item()
+        # 2- 根据索引，获得命名实体的名称
+        ner_type_name = config.id2label.get(ner_index)
+
+        print(
+            f"词：{word}，命名实体类别索引：{ner_index}，命名实体的名称：{ner_type_name}"
+        )
+
+
 if __name__ == "__main__":
     print("")
 
@@ -277,4 +322,7 @@ if __name__ == "__main__":
     # q_and_a()
 
     # 5- 文本摘要
-    summary()
+    # summary()
+
+    # 6- NER命名实体识别
+    ner()
