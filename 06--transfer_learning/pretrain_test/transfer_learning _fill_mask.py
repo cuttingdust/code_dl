@@ -185,3 +185,63 @@ def train_model():
         # 6- 每个epoch保存一次训练好的模型
         torch.save(model.state_dict(), f"model/fill_mask_{epoch+1}.pkl")
 
+
+# 6- 模型预测
+def predict_model():
+    # 1- 加载训练好的模型
+    model = AiModel().to(device)
+    model.load_state_dict(torch.load("model/fill_mask_3.pkl"))
+    # 2- 创建测试数据加载器
+    dataloader = get_dataloader(task_type="test")
+
+    # 3- 开始预测
+    model.eval()
+    correct = 0  # 预测正确的条数
+    total_sample = 0  # 总样本的条数
+
+    for i, (input_ids, token_type_ids, attention_mask, labels) in enumerate(
+        tqdm(dataloader), start=1
+    ):
+        # 3.1- 将数据发送到指定设备
+        input_ids = input_ids.to(device)
+        token_type_ids = token_type_ids.to(device)
+        attention_mask = attention_mask.to(device)
+        labels = labels.to(device)
+
+        with torch.no_grad():
+            # 3.2- 前向传播
+            output = model(input_ids, token_type_ids, attention_mask)
+            # 3.3- 得到预测概率最高的索引
+            tmp = torch.argmax(output, dim=-1)
+            # 3.4- 统计预测正确的样本条数
+            correct += (tmp == labels).sum().item()
+            # 3.5- 更新总样本条数
+            total_sample += len(labels)
+
+            # 4- 阶段性打印相关信息
+            if i % 20 == 0:
+                # 4.1- 获取预测概率最高的那个索引
+                tmp = torch.argmax(output, dim=-1)
+                # 4.2- 统计准确率
+                acc = (tmp == labels).sum().item() / len(labels)
+                # 4.3- 原始文本的内容
+                text_list = bert_tokenizer.decode(
+                    input_ids[0],
+                    skip_special_tokens=False,
+                    clean_up_tokenization_spaces=True,
+                )
+                # 4.4- 预测文本的内容
+                predict_text = bert_tokenizer.decode(tmp[0])
+                # 4.5- 原始文本的内容
+                true_text = bert_tokenizer.decode(labels[0])
+                print(
+                    f"准确率{acc}，原始句子文本的内容 {text_list}，原始的内容 {true_text}，预测填充内容 {predict_text}"
+                )
+
+
+if __name__ == "__main__":
+    # 1- 模型训练测试
+    # train_model()
+
+    # 2- 模型预测
+    predict_model()
