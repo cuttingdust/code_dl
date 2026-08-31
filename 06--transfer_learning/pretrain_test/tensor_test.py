@@ -15,3 +15,10 @@ if __name__ == "__main__":
     print("-" * 40)
     result_3 = (pred_index == labels).sum().item()
     print(result_3)
+
+    print("-" * 30)
+    predict_mask_index = 3
+    last_hidden_state = torch.randint(low=1, high=5, size=(2, 5, 6))
+    mask_hidden = last_hidden_state[:, predict_mask_index]
+    print(mask_hidden)
+    print(mask_hidden.shape)
