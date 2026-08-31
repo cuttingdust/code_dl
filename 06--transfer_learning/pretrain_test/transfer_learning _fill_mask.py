@@ -99,3 +99,89 @@ def get_dataloader(task_type):
     )
 
     return dataloader
+
+
+# 4- 自定义微调网络结构
+class AiModel(nn.Module):
+    def __init__(self):
+        # 1- 初始化父类
+        super().__init__()
+
+        # 2- 创建线性层
+        # 方式一：随机初始化偏置
+        # self.linear = nn.Linear(768,bert_tokenizer.vocab_size)
+
+        # 方式二：推荐，手动对偏置进行全0初始化，可以让模型训练更加稳定
+        self.linear = nn.Linear(768, bert_tokenizer.vocab_size, bias=False)
+        self.linear.bias = nn.Parameter(torch.zeros(bert_tokenizer.vocab_size))
+
+    def forward(self, input_ids, token_type_ids, attention_mask):
+        # 1- 先调用预训练模型：不允许预训练模型进行梯度下降计算，防止更新参数
+        with torch.no_grad():
+            output = bert_model(
+                input_ids=input_ids,
+                token_type_ids=token_type_ids,
+                attention_mask=attention_mask,
+            )
+
+        # 2- 再调用我们自己定义的微调网络层：因为是针对某个具体位置的词进行预测，因此取要预测词对应位置的隐藏状态信息
+        output = self.linear(output.last_hidden_state[:, predict_mask_index])
+
+        return output
+
+
+# 5- 模型训练
+def train_model():
+    # 1- 创建自定义微调网络结构
+    model = AiModel().to(device)
+
+    # 2- 禁用预训练模型的梯度下降，防止更新参数
+    for param in bert_model.parameters():
+        param.requires_grad_(False)
+
+    # 3- 创建相关实例对象
+    # 3.1- 损失函数
+    loss = nn.CrossEntropyLoss()
+
+    # 3.2- 优化器
+    optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-3)
+
+    # 4- 循环训练
+    # 4.1- 设置模式为训练模型：也就是允许Dropout随机失活
+    model.train()
+    epochs = 3
+
+    # 4.2- 训练
+    for epoch in range(epochs):
+        dataloader = get_dataloader(task_type="train")
+        for i, (input_ids, token_type_ids, attention_mask, labels) in enumerate(
+            tqdm(dataloader), start=1
+        ):
+            # 4.3- 将数据发送到指定设备
+            input_ids = input_ids.to(device)
+            token_type_ids = token_type_ids.to(device)
+            attention_mask = attention_mask.to(device)
+            labels = labels.to(device)
+
+            # 4.4- 前向传播
+            output = model(input_ids, token_type_ids, attention_mask)
+            # 4.5- 算损失值
+            loss_value = loss(output, labels)
+            # 4.6- 反向传播
+            optimizer.zero_grad()
+            loss_value.sum().backward()
+            optimizer.step()
+
+            # 5- 阶段性打印相关信息
+            if i % 20 == 0:
+                # 5.1- 获取预测概率最高的那个索引
+                tmp = torch.argmax(output, dim=-1)
+                # 5.2- 统计准确率
+                acc = (tmp == labels).sum().item() / len(labels)
+                print(
+                    f"轮次{epoch+1}，第{i}批次，当前的损失值是{loss_value}，准确率{acc}"
+                )
+
+        # 6- 每个epoch保存一次训练好的模型
+        torch.save(model.state_dict(), f"model/fill_mask_{epoch+1}.pkl")
+
