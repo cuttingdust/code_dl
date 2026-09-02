@@ -68,7 +68,7 @@ if __name__ == "__main__":
             n_estimators：弱学习器的个数
             n_jobs：指定多少个线程数
     """
-    model = RandomForestClassifier(n_estimators=100, n_jobs=10)
+    model = RandomForestClassifier(n_estimators=100, n_jobs=16)
     model.fit(x_train, y_train)
 
     # 6- 模型评估
