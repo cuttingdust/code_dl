@@ -5,8 +5,7 @@ import time
 import requests
 import streamlit as st
 
-
-# app_streamlit.py 位于 code_dl/07--tmf/01-rf 目录中。
+# app_streamlit.py 位于 code_dl/07--tmf/01--rf 目录中。
 # PyCharm 直接运行脚本时，项目根目录不一定会自动加入 sys.path，
 # 因此这里显式加入 code_dl，保证无论工作目录设置在哪里都能导入公共 tools 包。
 APP_PATH = Path(__file__).resolve()
@@ -15,7 +14,6 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from tools import print_json
-
 
 PREDICT_API_URL = "http://127.0.0.1:8888/predict_api"
 REQUEST_TIMEOUT_SECONDS = 10
