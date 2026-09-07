@@ -45,7 +45,7 @@ def char_manual_train():
     # 4- 其他操作
     # 4.1- 使用训练好的模型进行预测
     pred_result = model.predict(
-        [
+        text=[
             "房 山 纯 新 盘 绿 地 新 都 会 国 际 花 都 1 1 月 开 盘",
             "世 界 杯 决 赛 球 队 公 布 最 新 首 发 阵 容",
         ]
