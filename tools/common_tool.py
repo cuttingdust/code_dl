@@ -13,6 +13,8 @@
     print_json：高亮显示JSON数据。
     print_key_values：使用表格显示一组键值。
     print_table：显示普通二维表格。
+    print_model_compression_report：显示模型压缩前后的指标与体积变化。
+    get_path_size_mb：统计模型文件或模型目录的实际大小。
 
 MPoint类似C++中的局部跟踪对象：进入函数时打印BEGIN，离开函数时打印END，
 并自动记录执行成功、异常信息和耗时。
@@ -48,6 +50,7 @@ import inspect
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import datetime
+from pathlib import Path
 from types import TracebackType
 from typing import Any, TypeVar, cast
 
@@ -220,6 +223,140 @@ def print_table(
         table.add_row(*(Text(str(value)) for value in row_values))
 
     console.print(table)
+
+
+def get_path_size_mb(path: str | Path) -> float:
+    """统计单个文件或整个目录的大小，返回以MB为单位的结果。"""
+    target_path = Path(path)
+    if not target_path.exists():
+        raise FileNotFoundError(f"路径不存在：{target_path}")
+
+    if target_path.is_file():
+        total_bytes = target_path.stat().st_size
+    else:
+        # Hugging Face模型通常保存为一个目录，所以需要递归统计目录中的所有文件。
+        total_bytes = sum(
+            file_path.stat().st_size
+            for file_path in target_path.rglob("*")
+            if file_path.is_file()
+        )
+
+    return total_bytes / 1024 / 1024
+
+
+def print_model_compression_report(
+    original_metrics: Mapping[str, float],
+    compressed_metrics: Mapping[str, float],
+    original_size_mb: float,
+    compressed_size_mb: float,
+    *,
+    original_name: str = "原始FP32模型",
+    compressed_name: str = "INT8模型",
+    original_inference_ms: float | None = None,
+    compressed_inference_ms: float | None = None,
+) -> None:
+    """
+    使用表格打印模型压缩前后的效果、文件大小和可选推理时间。
+
+    ``original_metrics``和``compressed_metrics``需要包含：
+    accuracy、precision、recall、f1。指标值使用0~1之间的小数，例如0.925。
+
+    准确率等指标的变化使用“百分点”，例如92.5%变成91.8%是下降0.7个百分点；
+    模型大小使用相对百分比，例如390MB变成100MB是减少约74%。
+    """
+    metric_names = {
+        "accuracy": "Accuracy",
+        "precision": "Macro Precision",
+        "recall": "Macro Recall",
+        "f1": "Macro F1",
+    }
+
+    missing_metrics = [
+        metric
+        for metric in metric_names
+        if metric not in original_metrics or metric not in compressed_metrics
+    ]
+    if missing_metrics:
+        raise ValueError(
+            "模型指标缺少必要字段：" + "、".join(missing_metrics)
+        )
+    if original_size_mb <= 0 or compressed_size_mb <= 0:
+        raise ValueError("压缩前后的模型大小都必须大于0")
+    if (original_inference_ms is None) != (compressed_inference_ms is None):
+        raise ValueError("推理时间必须同时提供压缩前和压缩后的数值")
+
+    report_table = Table(
+        title=Text("BERT模型压缩实验", style="bold cyan"),
+        header_style="bold cyan",
+        border_style="cyan",
+        show_lines=False,
+    )
+    report_table.add_column("指标", style="bold", no_wrap=True)
+    report_table.add_column(original_name, justify="right", no_wrap=True)
+    report_table.add_column(compressed_name, justify="right", no_wrap=True)
+    report_table.add_column("变化", justify="right", no_wrap=True)
+
+    for metric_key, display_name in metric_names.items():
+        before = float(original_metrics[metric_key])
+        after = float(compressed_metrics[metric_key])
+        change_points = (after - before) * 100
+        change_text = (
+            f"提升 {change_points:.2f} 个百分点"
+            if change_points >= 0
+            else f"下降 {abs(change_points):.2f} 个百分点"
+        )
+        change_style = "green" if change_points >= 0 else "yellow"
+
+        report_table.add_row(
+            display_name,
+            f"{before:.2%}",
+            f"{after:.2%}",
+            Text(change_text, style=change_style),
+        )
+
+    size_reduction_percent = (
+        (original_size_mb - compressed_size_mb) / original_size_mb * 100
+    )
+    compression_ratio = original_size_mb / compressed_size_mb
+    size_change_text = (
+        f"减少 {size_reduction_percent:.2f}%"
+        if size_reduction_percent >= 0
+        else f"增加 {abs(size_reduction_percent):.2f}%"
+    )
+
+    report_table.add_section()
+    report_table.add_row(
+        "模型文件大小",
+        f"{original_size_mb:.2f} MB",
+        f"{compressed_size_mb:.2f} MB",
+        Text(
+            size_change_text,
+            style="green" if size_reduction_percent >= 0 else "red",
+        ),
+    )
+
+    if original_inference_ms is not None and compressed_inference_ms is not None:
+        if original_inference_ms <= 0 or compressed_inference_ms <= 0:
+            raise ValueError("压缩前后的推理时间都必须大于0")
+
+        speedup = original_inference_ms / compressed_inference_ms
+        speed_text = (
+            f"加速 {speedup:.2f} 倍"
+            if speedup >= 1
+            else f"变慢 {1 / speedup:.2f} 倍"
+        )
+        report_table.add_row(
+            "平均推理时间",
+            f"{original_inference_ms:.3f} ms",
+            f"{compressed_inference_ms:.3f} ms",
+            Text(speed_text, style="green" if speedup >= 1 else "red"),
+        )
+
+    console.print(report_table)
+    console.print(
+        f"压缩后模型约为原模型的 [bold cyan]{1 / compression_ratio:.2%}[/]，"
+        f"原模型文件是压缩后模型的 [bold cyan]{compression_ratio:.2f} 倍[/]。"
+    )
 
 
 class MPoint:
@@ -409,9 +546,11 @@ __all__ = [
     "MPoint",
     "MTracePoint",
     "console",
+    "get_path_size_mb",
     "print_json",
     "print_key_values",
     "print_log",
+    "print_model_compression_report",
     "print_panel",
     "print_section",
     "print_table",
