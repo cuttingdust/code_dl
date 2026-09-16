@@ -60,10 +60,10 @@ class BiLSTMStudentModel(nn.Module):
             out_features=config.classname_len,
         )
 
-    def forward(self, input_ids, attentition_mask):
+    def forward(self, input_ids, attention_mask):
         """
         :param input_ids: 句子中词索引
-        :param attentition_mask: 输入句子的掩码
+        :param attention_mask: 输入句子的掩码
         :return:
         """
 
@@ -77,7 +77,7 @@ class BiLSTMStudentModel(nn.Module):
         # 从句子中过滤掉 句子开头、句子结尾
         ebd_mask = (input_ids != cls_token_index) & (input_ids != sep_token_index)
         # 从句子中过滤掉 padding填充的0
-        ebd_mask: Tensor = ebd_mask & attentition_mask
+        ebd_mask: Tensor = ebd_mask & attention_mask
         # 将ebd_mask的形状由 [batch_size, seq_len] 升维至 [batch_size, seq_len, 1]
         ebd_mask = ebd_mask.unsqueeze(-1)
 
@@ -99,8 +99,10 @@ class BiLSTMStudentModel(nn.Module):
                 3- sum(dim=1)得到的结果形状[batch_size,hidden_size]。形状的含义是把一条句子中所有词的词向量加起来，
                     得到句子级别的向量总和
         """
-        # 分子：所有有效的词的向量之和
-        output_sum = output.sum(dim=1)
+        # 分子：只累加有效词位置的LSTM输出。
+        # 输入Embedding即使已置0，LSTM在Padding位置仍可能产生非0输出，
+        # 因此求和前需要再次使用掩码。
+        output_sum = (output * ebd_mask).sum(dim=1)
 
         # 分母：所有有效的词总数。1e-6为了防止分母为0
         token_count = ebd_mask.sum(dim=1) + 1e-6
