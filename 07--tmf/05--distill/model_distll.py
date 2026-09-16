@@ -84,19 +84,80 @@ def eval_model(model, use_token_type_ids=False):
     return f1score, accuracy, precision, recall
 
 
-def train_and_eval():
-    # 第一次训练时保存目录可能不存在，提前创建，避免torch.save()保存学生模型时报错。
-    Path(config.student_save_model).parent.mkdir(parents=True, exist_ok=True)
-
-    # 1- 加载数据
-    dataloader = build_dataloader(
+def train_teacher_model():
+    """重新训练教师BERT的分类层，并返回验证集表现最好的教师模型。"""
+    train_dataloader = build_dataloader(
         datapath=config.train_datapath,
         shuffle=True,
     )
 
-    # 2- 创建模型
-    # 2.1- 加载训练好的教师模型
     teacher_model = BertTeacherModel().to(device=config.device)
+    loss_fn = nn.CrossEntropyLoss()
+
+    # BERT主体已经冻结，只把需要梯度的Linear分类层参数交给优化器。
+    optimizer = torch.optim.AdamW(
+        params=(p for p in teacher_model.parameters() if p.requires_grad),
+        lr=5e-5,
+    )
+
+    epochs = 1
+    best_f1score = -1.0
+    validation_interval = 500
+
+    for epoch in range(epochs):
+        teacher_model.train()
+        # BERT主体被冻结，让它保持eval模式可关闭Dropout，保证句子特征稳定。
+        teacher_model.bert_model.eval()
+        total_loss = 0.0
+        train_progress = create_batch_progress(
+            train_dataloader,
+            description=f"教师训练 Epoch {epoch + 1}/{epochs}",
+        )
+
+        for i, (input_ids, attention_mask, token_type_ids, labels) in enumerate(
+            train_progress, start=1
+        ):
+            input_ids = input_ids.to(config.device)
+            attention_mask = attention_mask.to(config.device)
+            token_type_ids = token_type_ids.to(config.device)
+            labels = labels.to(config.device)
+
+            pred_output = teacher_model(input_ids, attention_mask, token_type_ids)
+            loss_value = loss_fn(pred_output, labels)
+            current_loss = loss_value.item()
+            total_loss += current_loss
+
+            optimizer.zero_grad()
+            loss_value.backward()
+            optimizer.step()
+
+            update_progress_metrics(
+                train_progress,
+                loss=current_loss,
+                avg_loss=total_loss / i,
+            )
+
+            if i % validation_interval == 0 or i == len(train_dataloader):
+                f1score, accuracy, precision, recall = eval_model(
+                    teacher_model, use_token_type_ids=True
+                )
+                print_evaluation_result(
+                    batch_index=i,
+                    total_batches=len(train_dataloader),
+                    f1=f1score,
+                    accuracy=accuracy,
+                    precision=precision,
+                    recall=recall,
+                )
+
+                if f1score > best_f1score:
+                    best_f1score = f1score
+                    torch.save(teacher_model.state_dict(), config.teacher_save_model)
+
+                teacher_model.train()
+                teacher_model.bert_model.eval()
+
+    # 后续蒸馏和最终报告都使用验证集F1最高的教师权重。
     teacher_model.load_state_dict(
         torch.load(
             config.teacher_save_model,
@@ -104,8 +165,35 @@ def train_and_eval():
             weights_only=True,
         )
     )
+    teacher_model.eval()
 
-    # 2.2- 新建学生模型
+    teacher_f1, teacher_accuracy, teacher_precision, teacher_recall = eval_model(
+        teacher_model, use_token_type_ids=True
+    )
+    teacher_metrics = {
+        "accuracy": teacher_accuracy,
+        "precision": teacher_precision,
+        "recall": teacher_recall,
+        "f1": teacher_f1,
+    }
+    return teacher_model, teacher_metrics
+
+
+def train_and_eval():
+    # 第一次训练时保存目录可能不存在，提前创建，避免torch.save()报错。
+    Path(config.teacher_save_model).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.student_save_model).parent.mkdir(parents=True, exist_ok=True)
+
+    # 1- 先重新训练教师分类模型，并记录正确的教师基准指标。
+    teacher_model, teacher_metrics = train_teacher_model()
+
+    # 2- 加载学生模型蒸馏训练数据
+    dataloader = build_dataloader(
+        datapath=config.train_datapath,
+        shuffle=True,
+    )
+
+    # 3- 新建学生模型。每次实验都重新初始化，不使用旧学生权重。
     student_model = BiLSTMStudentModel().to(device=config.device)
 
     # 3- 损失函数对象：用来计算硬标签的损失值
@@ -117,6 +205,7 @@ def train_and_eval():
     # 5- 其他变量
     epochs = 1
     best_f1score = 0.0  # f1值历史最高分
+    validation_interval = 500
 
     T = 2  # 软标签中的温度超参数
     alpha = 0.7  # 软硬标签的平衡权重系数
@@ -199,7 +288,7 @@ def train_and_eval():
             )
 
             # 6.9- 每隔100个批次或最后一个批次，对学生模型进行验证
-            if i % 100 == 0 or i == len(dataloader):
+            if i % validation_interval == 0 or i == len(dataloader):
                 # 6.9.1- 调用评估函数
                 f1score, accuracy, precision, recall = eval_model(student_model)
                 # 公共工具内部使用tqdm.write()，不会破坏正在运行的训练进度条。
@@ -230,19 +319,9 @@ def train_and_eval():
         )
     )
 
-    teacher_f1, teacher_accuracy, teacher_precision, teacher_recall = eval_model(
-        teacher_model, use_token_type_ids=True
-    )
     student_f1, student_accuracy, student_precision, student_recall = eval_model(
         student_model
     )
-
-    teacher_metrics = {
-        "accuracy": teacher_accuracy,
-        "precision": teacher_precision,
-        "recall": teacher_recall,
-        "f1": teacher_f1,
-    }
     student_metrics = {
         "accuracy": student_accuracy,
         "precision": student_precision,
