@@ -242,18 +242,49 @@ def train_and_eval():
             # 6.4- 学生模型_前向传播
             student_pred = student_model(input_ids, attention_mask)
 
-            # 6.5- 计算KL散度值
+            # 6.5- 计算KL散度值（软标签损失）
+            """
+            知识蒸馏使用的KL散度公式：
+
+                KL(P_teacher || Q_student)
+                    = Σ P_teacher(i) * [log P_teacher(i) - log Q_student(i)]
+
+            符号说明：
+                P_teacher：教师模型给出的普通概率分布
+                Q_student：学生模型给出的普通概率分布
+                i：某一个类别
+
+            从公式可以看到：
+                1- 教师模型需要提供普通概率P_teacher，因此使用softmax；
+                2- 学生模型需要提供log(Q_student)，因此使用log_softmax。
+
+            PyTorch的functional.kl_div默认要求：
+                input  = 对数概率log(Q)，这里传学生模型的q；
+                target = 普通概率P，这里传教师模型的p；
+                log_target=False，表示target不是对数概率。
+
+            因此下面计算的是：
+                KL(教师概率分布 || 学生概率分布)
+
+            如果教师模型也使用log_softmax得到对数概率，那么必须把
+            log_target设置为True，不能只替换softmax而保持其他参数不变。
+
+            温度T的作用：
+                logits除以T后，T越大，softmax概率分布越平缓，学生可以看到
+                教师对非正确类别的相对判断，也就是比硬标签更丰富的软信息。
+            """
             q = torch.log_softmax(student_pred / T, dim=-1)
             p = torch.softmax(teacher_pred / T, dim=-1)
-            # KL散度值，也就是软标签损失值
+
+            # 计算KL散度值，也就是软标签损失值。
             """
-                注意：kl_div的包不要导错了！！！
-                参数解释：
-                    input：是【学生模型】输出的结果
-                    target：预测结果参考值。也就是【教师模型】输出的结果
-                    reduction：上面两个值的计算方式。
-                    log_target：target是否已经是对数概率。
-                    当前p由softmax得到，是普通概率，因此必须设置为False。
+            参数解释：
+                input：学生模型的对数概率log(Q_student)
+                target：教师模型的普通概率P_teacher
+                reduction="batchmean"：先对所有类别求和，再按照批次求平均，
+                                       与KL散度的数学定义对应
+                log_target=False：target不是对数概率；当前p由softmax得到，
+                                  所以这里必须设置为False
             """
             kl_loss = torch.nn.functional.kl_div(
                 input=q,
@@ -267,7 +298,9 @@ def train_and_eval():
             hard_loss = loss(student_pred, labels)
 
             # 6.7- 蒸馏的总损失值
-            # l = (1-α) * 硬标签损失值 + α * T² * KL散度值
+            # 蒸馏总损失公式：
+            # L = (1-α) * HardLoss + α * T² * KL(P_teacher || Q_student)
+            # T²用于补偿温度缩放造成的梯度变小，使软标签损失在不同T下仍有合适的影响力。
             distill_loss = (1 - alpha) * hard_loss + alpha * T**2 * kl_loss
 
             # item()只提取普通浮点数用于显示，不会让损失累计过程继续引用计算图。
