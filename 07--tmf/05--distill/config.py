@@ -26,9 +26,7 @@ class Config:
         ]
         self.classname_len = len(self.classname_list)
 
-        # 6- 训练好的【教师模型】的保存路径
-        # 当前工作目录是05--distill；教师模型已经由03--bert训练并保存，
-        # 因此先返回上一级07--tmf，再进入03--bert读取教师模型权重。
+        # 6- 本次蒸馏实验重新训练并保存的【教师模型】路径
         self.teacher_save_model = r"save_model\bert.pkl"
 
         # 7- 训练好的【学生模型】的保存路径

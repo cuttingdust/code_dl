@@ -40,24 +40,48 @@ class BertTeacherModel(nn.Module):
                 token_type_ids=token_type_ids,
             )
 
-        # 2- 教师模型的：池化层，实际就是nn.Linear+激活函数。不用额外定义
+        # 2- 教师模型的：池化层，实际就是nn.Linear + Tanh激活函数，不用额外定义
         """
-        1- last_hidden_state[:,0]和pooler_output的区别。
-        区别：需要对last_hidden_state[:,0]经过nn.Linear和激活函数处理后，才能得到pooler_output
-        对应源代码位置：BertModel文件的697行
+        1- last_hidden_state[:, 0, :]和pooler_output的区别
 
-        2- 为什么使用pooler_output，而不使用last_hidden_state[:,0]
-        使用pooler_output的原因有如下几个
-            语义对齐：pooler_output已经是句子级别的表示，与下游任务的张量形状是对其的
-        如果不做蒸馏，那么用last_hidden_state[:,0]；如果做模型蒸馏用pooler_output。推荐全部都用pooler_output
+            last_hidden_state[:, 0, :]是[CLS]位置未经池化层处理的特征。
 
-        3- 获得池化层后的结果有两种方式：
-            3.1- 方式一：推荐。通过实例属性获得 bert_output.pooler_output
-            3.2- 方式二：通过实例属性索引获得 bert_output[1]。1的原因是pooler_output是类中的第2个实例属性
-                        对应源代码位置：BertModel文件的1017行
+            pooler_output的计算过程是：
+                last_hidden_state[:, 0, :]
+                    -> BertPooler中的Linear层
+                    -> Tanh激活函数
+                    -> pooler_output
+
+            对应源代码可以查看BertModel和BertPooler的forward方法。
+            注意：Transformers版本不同，具体源码行号可能发生变化。
+
+        2- 为什么这里使用pooler_output
+
+            当前任务是对整条新闻文本进行分类，需要获得句子级别的特征。
+            pooler_output的形状是[batch_size, hidden_size]，它已经把[CLS]位置
+            进一步转换成固定长度的句子级表示，因此可以交给后面的Linear层分类。
+
+            注意：是否使用pooler_output，与是否进行模型蒸馏没有必然关系。
+            不做蒸馏时可以使用pooler_output，做蒸馏时也可以使用
+            last_hidden_state[:, 0, :]。
+
+            真正重要的是：分类层训练、模型蒸馏和模型推理必须使用同一种特征。
+            如果Linear分类层是使用last_hidden_state[:, 0, :]训练的，就必须继续
+            使用last_hidden_state[:, 0, :]；不能直接改接pooler_output。
+
+            当前蒸馏实验会重新训练教师模型的Linear分类层，所以这里可以使用
+            pooler_output，让新的Linear分类层重新学习对应的分类边界。
+
+        3- 获得池化层结果的两种方式
+
+            3.1- 方式一（推荐）：通过实例属性获得，可读性更好
+                pooler_output = bert_output.pooler_output
+
+            3.2- 方式二：通过索引获得。pooler_output是返回结果中的第2项
+                pooler_output = bert_output[1]
         """
 
-        # 下面两个代码的作用完全相同
+        # 下面两行代码作用相同，推荐使用属性名称，代码含义更加清楚。
         pooler_output = bert_output.pooler_output
         # pooler_output = bert_output[1]
 

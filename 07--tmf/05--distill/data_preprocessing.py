@@ -1,8 +1,6 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
-from transformers import BertConfig
-from transformers import BertModel
 from transformers import BertTokenizer
 
 from config import Config
@@ -10,8 +8,6 @@ from config import Config
 # 1- 公共变量
 config = Config()
 bert_tokenizer = BertTokenizer.from_pretrained(config.bert_path)
-bert_model = BertModel.from_pretrained(config.bert_path)
-bert_config = BertConfig.from_pretrained(config.bert_path)
 
 
 def load_raw_file(datapath):
