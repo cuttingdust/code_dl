@@ -1,7 +1,20 @@
+import sys
+from pathlib import Path
+
 import torch
 import torch.nn as nn
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
-from tqdm import tqdm
+
+# 当前文件位于code_dl/07--tmf/03--bert，向上三级可以得到项目根目录code_dl。
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from tools import (
+    create_batch_progress,
+    print_evaluation_result,
+    update_progress_metrics,
+)
 
 from bert_model import BertClassifierModel
 from config import Config
@@ -25,11 +38,9 @@ def eval_model(model):
         # 1. desc明确说明当前处于验证阶段；
         # 2. ncols限制宽度，避免进度条占满PyCharm控制台；
         # 3. leave=False表示验证结束后清除这一行，避免每验证一次就永久留下一个进度条。
-        dev_progress = tqdm(
+        dev_progress = create_batch_progress(
             dev_dataloader,
-            desc="验证模型",
-            unit="batch",
-            ncols=120,
+            description="验证模型",
             leave=False,
         )
 
@@ -85,11 +96,9 @@ def train_and_eval():
 
         # 每个Epoch创建一条训练进度条。
         # unit="batch"表示进度单位是批次；ncols限制控制台中的显示宽度。
-        train_progress = tqdm(
+        train_progress = create_batch_progress(
             train_dataloader,
-            desc=f"训练 Epoch {epoch + 1}/{epochs}",
-            unit="batch",
-            ncols=120,
+            description=f"训练 Epoch {epoch + 1}/{epochs}",
         )
 
         for i, batch in enumerate(train_progress, start=1):
@@ -118,9 +127,10 @@ def train_and_eval():
 
             # 在同一条进度条右侧动态展示当前批次Loss和当前平均Loss。
             # set_postfix只更新进度条内容，不会像普通print一样把进度条切断。
-            train_progress.set_postfix(
-                loss=f"{current_loss:.4f}",
-                avg_loss=f"{total_loss / i:.4f}",
+            update_progress_metrics(
+                train_progress,
+                loss=current_loss,
+                avg_loss=total_loss / i,
             )
 
             # 6.6- 每隔100个批次对已训练的模型进行验证
@@ -129,15 +139,14 @@ def train_and_eval():
                 # 6.6.1- 调用评估函数
                 f1score, accuracy, precision, recall = eval_model(model)
 
-                # 进度条运行期间使用tqdm.write()，不要使用普通print()。
-                # tqdm会先暂时移开训练进度条，完整打印验证结果后再恢复进度条，避免两者挤在同一行。
-                tqdm.write(
-                    f"[验证结果] "
-                    f"批次={i}/{len(train_dataloader)} | "
-                    f"F1={f1score:.4f} | "
-                    f"准确率={accuracy:.4f} | "
-                    f"精确率={precision:.4f} | "
-                    f"召回率={recall:.4f}"
+                # 公共工具内部使用tqdm.write()，不会破坏正在运行的训练进度条。
+                print_evaluation_result(
+                    batch_index=i,
+                    total_batches=len(train_dataloader),
+                    f1=f1score,
+                    accuracy=accuracy,
+                    precision=precision,
+                    recall=recall,
                 )
 
                 # 6.6.2- 如果验证后发现模型效果有提升（也就是f1score比上次的要大），那就保存模型

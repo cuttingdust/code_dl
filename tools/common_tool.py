@@ -16,6 +16,11 @@
     print_model_compression_report：显示模型压缩前后的指标与体积变化。
     get_path_size_mb：统计模型文件或模型目录的实际大小。
 
+3. 模型训练进度显示
+    create_batch_progress：创建统一宽度和单位的批次进度条。
+    update_progress_metrics：在进度条右侧动态更新Loss等指标。
+    print_evaluation_result：在不破坏进度条的情况下打印验证结果。
+
 MPoint类似C++中的局部跟踪对象：进入函数时打印BEGIN，离开函数时打印END，
 并自动记录执行成功、异常信息和耗时。
 
@@ -60,6 +65,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from rich.theme import Theme
+from tqdm import tqdm
 
 
 # F表示任意同步或异步函数类型。
@@ -92,6 +98,55 @@ LOG_STYLES: dict[str, tuple[str, str]] = {
     "DEBUG": ("log.debug", "-"),
     "EVENT": ("log.event", ">"),
 }
+
+
+def create_batch_progress(
+    iterable: Iterable[Any],
+    *,
+    description: str,
+    leave: bool = True,
+    width: int = 120,
+) -> tqdm:
+    """
+    创建项目统一的批次进度条。
+
+    leave=False适合验证过程：验证结束后清除临时进度条；
+    leave=True适合训练过程：当前Epoch结束后保留最终进度。
+    """
+    return tqdm(
+        iterable,
+        desc=description,
+        unit="batch",
+        ncols=width,
+        leave=leave,
+    )
+
+
+def update_progress_metrics(progress: tqdm, **metrics: float) -> None:
+    """在已有进度条右侧动态显示Loss等浮点指标，统一保留4位小数。"""
+    progress.set_postfix(
+        {metric_name: f"{metric_value:.4f}" for metric_name, metric_value in metrics.items()}
+    )
+
+
+def print_evaluation_result(
+    *,
+    batch_index: int,
+    total_batches: int,
+    f1: float,
+    accuracy: float,
+    precision: float,
+    recall: float,
+) -> None:
+    """使用tqdm.write打印统一格式的分类模型验证结果，不破坏训练进度条。"""
+    tqdm.write(
+        f"[验证结果] "
+        f"批次={batch_index}/{total_batches} | "
+        f"F1={f1:.4f} | "
+        f"准确率={accuracy:.4f} | "
+        f"精确率={precision:.4f} | "
+        f"召回率={recall:.4f}"
+    )
 
 
 def print_section(title: str, *, style: str = "cyan") -> None:
@@ -252,6 +307,7 @@ def print_model_compression_report(
     *,
     original_name: str = "原始FP32模型",
     compressed_name: str = "INT8模型",
+    title: str = "BERT模型压缩实验",
     original_inference_ms: float | None = None,
     compressed_inference_ms: float | None = None,
 ) -> None:
@@ -286,7 +342,7 @@ def print_model_compression_report(
         raise ValueError("推理时间必须同时提供压缩前和压缩后的数值")
 
     report_table = Table(
-        title=Text("BERT模型压缩实验", style="bold cyan"),
+        title=Text(title, style="bold cyan"),
         header_style="bold cyan",
         border_style="cyan",
         show_lines=False,
@@ -354,8 +410,10 @@ def print_model_compression_report(
 
     console.print(report_table)
     console.print(
-        f"压缩后模型约为原模型的 [bold cyan]{1 / compression_ratio:.2%}[/]，"
-        f"原模型文件是压缩后模型的 [bold cyan]{compression_ratio:.2f} 倍[/]。"
+        f"{compressed_name}约为{original_name}的 "
+        f"[bold cyan]{1 / compression_ratio:.2%}[/]，"
+        f"{original_name}文件是{compressed_name}的 "
+        f"[bold cyan]{compression_ratio:.2f} 倍[/]。"
     )
 
 
@@ -546,7 +604,9 @@ __all__ = [
     "MPoint",
     "MTracePoint",
     "console",
+    "create_batch_progress",
     "get_path_size_mb",
+    "print_evaluation_result",
     "print_json",
     "print_key_values",
     "print_log",
@@ -554,4 +614,5 @@ __all__ = [
     "print_panel",
     "print_section",
     "print_table",
+    "update_progress_metrics",
 ]
