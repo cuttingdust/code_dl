@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "saved_at": "2026-09-17T02:48:45.496135+00:00",
+  "model_file": "before_prune_model.pkl",
+  "model_size_bytes": 409169600,
+  "metrics": {
+    "accuracy": 0.8516,
+    "precision": 0.8534000162716516,
+    "recall": 0.8516,
+    "f1": 0.8514878663796074
+  },
+  "model_config": {
+    "model_class": "BertClassifierModel",
+    "pretrained_model": "bert-base-chinese",
+    "max_length": 32,
+    "class_names": [
+      "finance",
+      "realty",
+      "stocks",
+      "education",
+      "science",
+      "society",
+      "politics",
+      "sports",
+      "game",
+      "entertainment"
+    ],
+    "class_count": 10
+  },
+  "evaluation": {
+    "dataset": "data\\dev.txt",
+    "dataset_sha256": "6ed73aa2c57ee1560c8f76570d48735c4b1c29ae4983fe3523d56e115813e175",
+    "split": "dev",
+    "sample_count": 10000,
+    "metric_average": "macro"
+  },
+  "compression": {
+    "type": "none",
+    "actual_sparsity": 0.0
+  },
+  "extra": {
+    "source": "03--bert/save_model/bert.pkl"
+  }
+}

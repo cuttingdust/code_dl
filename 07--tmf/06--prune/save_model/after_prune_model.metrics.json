@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "saved_at": "2026-09-17T02:50:20.525907+00:00",
+  "model_file": "after_prune_model.pkl",
+  "model_size_bytes": 409169731,
+  "metrics": {
+    "accuracy": 0.8439,
+    "precision": 0.8467041323218885,
+    "recall": 0.8439,
+    "f1": 0.8435121510315076
+  },
+  "model_config": {
+    "model_class": "BertClassifierModel",
+    "pretrained_model": "bert-base-chinese",
+    "max_length": 32,
+    "class_names": [
+      "finance",
+      "realty",
+      "stocks",
+      "education",
+      "science",
+      "society",
+      "politics",
+      "sports",
+      "game",
+      "entertainment"
+    ],
+    "class_count": 10
+  },
+  "evaluation": {
+    "dataset": "data\\dev.txt",
+    "dataset_sha256": "6ed73aa2c57ee1560c8f76570d48735c4b1c29ae4983fe3523d56e115813e175",
+    "split": "dev",
+    "sample_count": 10000,
+    "metric_average": "macro"
+  },
+  "compression": {
+    "type": "global_l1_unstructured",
+    "target": "BERT Encoder self-attention Q/K/V weights",
+    "requested_prune_amount": 0.3,
+    "actual_sparsity": 0.2999999905809944,
+    "pruned_linear_layer_count": 36
+  },
+  "extra": {}
+}
