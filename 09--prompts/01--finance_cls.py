@@ -28,7 +28,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import (
+    ChatPromptTemplate,
+    FewShotChatMessagePromptTemplate,
+)
 
 # 当前文件位于：code_dl/09--prompts/01--finance_cls.py。
 CURRENT_DIR = Path(__file__).resolve().parent
@@ -131,10 +134,48 @@ def create_chat_model():
 
 def build_finance_classification_prompt() -> ChatPromptTemplate:
     """构建包含分类规则和Few-shot示例的金融分类提示词。"""
-    messages = [
-        (
-            "system",
-            """
+    # FewShotChatMessagePromptTemplate要求examples是字典列表。
+    # 字典中的content和label，分别对应下面模板里的{content}和{label}。
+    examples = [
+        {
+            "content": example_text,
+            "label": label,
+        }
+        for label, example_text in CLASS_EXAMPLES.items()
+    ]
+
+    # 定义“一条Few-shot示例”应该怎样转换成聊天消息：
+    #
+    #     HumanMessage：待分类的金融文本
+    #     AIMessage：这段文本对应的正确类别
+    example_prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "human",
+                "请对下面###之间的文本进行分类：\n" "###\n" "{content}\n" "###",
+            ),
+            ("ai", "{label}"),
+        ]
+    )
+
+    # 使用LangChain专门提供的Few-shot聊天提示词API管理示例。
+    # 当前使用固定examples，所以每次分类都会放入全部4个示例。
+    # 如果以后示例数量很多，可以改成example_selector，动态选择相关示例。
+    few_shot_prompt = FewShotChatMessagePromptTemplate(
+        examples=examples,
+        example_prompt=example_prompt,
+    )
+
+    # 完整消息顺序：
+    #
+    #     System：分类规则
+    #     Human/AI：4组Few-shot示例
+    #     Human：真正需要分类的新文本
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                """
 你是一名金融行业文本分类专家。
 
 请判断用户输入的金融文本属于以下哪个类别：
@@ -151,35 +192,20 @@ def build_finance_classification_prompt() -> ChatPromptTemplate:
 2. 只输出类别名称，不要输出“类别为”、原因、标点或其他内容。
 3. 不允许创造新的类别。
 """.strip(),
-        ),
-    ]
-
-    # Few-shot的本质是在真正提问前，先放入几组“输入 -> 正确输出”示范。
-    for category, example_text in CLASS_EXAMPLES.items():
-        messages.extend(
-            [
-                (
-                    "human",
-                    "请对下面###之间的文本进行分类：\n"
-                    f"###\n{example_text}\n###",
-                ),
-                ("ai", category),
-            ]
-        )
-
-    # 最后一条Human消息才是每次调用时真正需要分类的新文本。
-    messages.append(
-        (
-            "human",
-            "请对下面###之间的文本进行分类：\n"
-            "###\n"
-            "{content}\n"
-            "###\n"
-            "分类结果：",
-        )
+            ),
+            # 这个对象在格式化时会自动展开成4组HumanMessage和AIMessage。
+            few_shot_prompt,
+            # {content}是每次调用时真正需要分类的新文本。
+            (
+                "human",
+                "请对下面###之间的文本进行分类：\n"
+                "###\n"
+                "{content}\n"
+                "###\n"
+                "分类结果：",
+            ),
+        ]
     )
-
-    prompt = ChatPromptTemplate.from_messages(messages)
 
     return prompt.partial(category_names="、".join(FINANCE_CATEGORIES))
 
