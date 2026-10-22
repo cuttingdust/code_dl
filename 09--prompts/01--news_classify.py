@@ -30,7 +30,7 @@
 
 也可以在命令行中临时指定课程数据所在的位置：
 
-    python 09--prompts/01_news_classify.py --data-dir "TNEWS目录" --limit 10
+    python 09--prompts/01--news_classify.py --data-dir "TNEWS目录" --limit 10
 
 注意：每预测一条数据都会调用一次大模型API。为避免学习时产生大量请求，
 默认只预测10条；确认代码和费用都没有问题后，再通过 ``--limit`` 增加数量。
@@ -63,7 +63,7 @@ from langchain_core.runnables import RunnableSequence
 from sklearn.metrics import accuracy_score, classification_report
 from tqdm import tqdm
 
-# 当前文件位于：code_dl/09--prompts/01_news_classify.py。
+# 当前文件位于：code_dl/09--prompts/01--news_classify.py。
 CURRENT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = CURRENT_DIR.parent
 
