@@ -294,7 +294,15 @@ def apply_parameter_overrides(
     config: InferenceConfig,
     args: argparse.Namespace,
 ) -> InferenceConfig:
-    """把命令行中明确提供的参数覆盖到预设配置上。"""
+    """把命令行中明确提供的参数覆盖到预设配置上。
+
+    ``InferenceConfig``使用了``@dataclass(frozen=True)``，因此不能写成：
+
+        config.temperature = 1.2
+
+    这里通过``dataclasses.replace()``复制原配置，再用命令行参数覆盖其中
+    一部分字段，最终返回一个新的``InferenceConfig``对象。
+    """
     overrides = {}
     for argument_name in (
         "temperature",
@@ -310,7 +318,14 @@ def apply_parameter_overrides(
     if not overrides:
         return config
 
-    # dataclasses.replace()会基于原对象创建新对象，不会修改冻结的数据类。
+    # dataclasses.replace()的处理过程可以理解为：
+    # 1. 复制config中的所有字段，例如top_p、max_tokens等；
+    # 2. 使用下面明确传入的name、description和**overrides覆盖同名字段；
+    # 3. 调用InferenceConfig的构造方法，返回一个全新的配置对象；
+    # 4. 原来的config保持不变，所以适合配合frozen=True的数据类使用。
+    #
+    # 例如overrides={"temperature": 1.2}时，只有temperature会变成1.2，
+    # 没有出现在overrides中的top_p等参数仍沿用原配置中的值。
     return replace(
         config,
         name=f"{config.name}（命令行覆盖）",
